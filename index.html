@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DockMove Dashboard</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
 
+    <!-- Header navigation bar -->
     <nav class="border-b border-slate-800 bg-slate-950 px-6 py-4">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center space-x-3">
@@ -23,10 +25,21 @@
         </div>
     </nav>
 
+    <!-- Content workspace -->
     <main class="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
         
+        <!-- Bulk Action Bar (Hidden by default, slides up when containers are selected) -->
+        <div id="bulk-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-950 border border-amber-500/30 px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-6 z-40 transition-all duration-300 translate-y-24 opacity-0 pointer-events-none">
+            <span class="text-sm font-medium text-slate-300"><span id="selected-count" class="text-amber-400 font-bold">0</span> containers selected</span>
+            <button onclick="triggerBulkBackup()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition duration-200 flex items-center gap-2">
+                <i class="fa-solid fa-download"></i> Backup Selected
+            </button>
+        </div>
+
+        <!-- Dashboard Grid Layout -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
+            <!-- Left Side: Container Discovery List -->
             <div class="lg:col-span-2 bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -41,7 +54,9 @@
                     <table class="w-full text-left text-sm text-slate-300">
                         <thead>
                             <tr class="border-b border-slate-800 text-slate-400 font-medium">
-                                <th class="pb-3 w-8"></th>
+                                <th class="pb-3 w-10">
+                                    <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)" class="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500 cursor-pointer">
+                                </th>
                                 <th class="pb-3">Container Name</th>
                                 <th class="pb-3">Docker Image</th>
                                 <th class="pb-3">Status</th>
@@ -57,7 +72,9 @@
                 </div>
             </div>
 
+            <!-- Right Side: Restoration Pipeline and Settings -->
             <div class="space-y-8">
+                <!-- Migration Backup Settings panel -->
                 <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
                     <h3 class="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
                         <i class="fa-solid fa-sliders text-amber-500"></i> Backup Configurations
@@ -74,45 +91,72 @@
                     </div>
                 </div>
 
+                <!-- Recovery Dropzone pipeline -->
                 <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
                     <h3 class="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
                         <i class="fa-solid fa-cloud-arrow-up text-amber-500"></i> Restore Container Pipeline
                     </h3>
                     <div id="dropzone" class="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-lg p-6 text-center cursor-pointer transition bg-slate-900/50">
                         <i class="fa-solid fa-box-archive text-3xl text-slate-600 mb-3"></i>
-                        <p class="text-sm font-medium">Click to select backup archive</p>
-                        <p class="text-xs text-slate-500 mt-1">Accepts raw .zip files created via dockmove</p>
-                        <input type="file" id="file-input" class="hidden" accept=".zip">
+                        <p class="text-sm font-medium">Click to select backup archives</p>
+                        <p class="text-xs text-slate-500 mt-1">Accepts multiple .zip files at once</p>
+                        <!-- Added 'multiple' tag here -->
+                        <input type="file" id="file-input" class="hidden" accept=".zip" multiple>
                     </div>
-                    <div id="restore-status" class="mt-4 text-sm hidden"></div>
+                    
+                    <!-- Restore Queue View -->
+                    <div id="queue-container" class="mt-6 space-y-3 hidden">
+                        <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Restoration Queue</h4>
+                        <div id="queue-list" class="space-y-2">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
 
         </div>
     </main>
 
+    <!-- Progress Overlay -->
+    <div id="progress-overlay" class="fixed inset-0 bg-slate-950/85 flex-col justify-center items-center z-50 text-slate-200 hidden">
+        <div class="text-center space-y-4 max-w-md px-6">
+            <i class="fa-solid fa-compact-disc animate-spin text-5xl text-amber-500"></i>
+            <h3 id="overlay-title" class="text-lg font-bold">Processing</h3>
+            <p id="overlay-desc" class="text-sm text-slate-400">Please wait...</p>
+            <div class="w-full bg-slate-800 rounded-full h-2 mt-2">
+                <div id="overlay-progress-bar" class="bg-amber-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Javascript APIs -->
     <script>
-        const API_BASE = "";
+        const API_BASE = ""; 
+        let containerData = [];
 
         async function loadContainers() {
             const tbody = document.getElementById("container-list");
             tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400"><i class="fa-solid fa-spinner animate-spin mr-2"></i> Fetching details...</td></tr>`;
+            document.getElementById('select-all').checked = false;
+            updateBulkActionBar();
             
             try {
                 const response = await fetch(`${API_BASE}/api/containers`);
-                const containers = await response.json();
+                containerData = await response.json();
                 
-                if (containers.length === 0) {
+                if (containerData.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500">No containers found on target system.</td></tr>`;
                     return;
                 }
 
                 tbody.innerHTML = "";
-                containers.forEach(c => {
+                containerData.forEach(c => {
                     const statusColor = c.status === "running" ? "text-emerald-500" : "text-slate-500";
                     tbody.innerHTML += `
                         <tr class="hover:bg-slate-900/50 transition duration-150">
-                            <td class="py-4"><i class="fa-brands fa-docker text-slate-600"></i></td>
+                            <td class="py-4">
+                                <input type="checkbox" name="container-select" value="${c.id}" data-name="${c.name}" onclick="updateBulkActionBar()" class="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500 cursor-pointer">
+                            </td>
                             <td class="py-4 font-semibold text-slate-200">${c.name}</td>
                             <td class="py-4 text-slate-400 font-mono text-xs">${c.image}</td>
                             <td class="py-4">
@@ -121,7 +165,7 @@
                                 </span>
                             </td>
                             <td class="py-4 text-right">
-                                <button onclick="triggerBackup('${c.id}', '${c.name}')" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-3.5 py-2 rounded-lg transition duration-200">
+                                <button onclick="triggerSingleBackup('${c.id}', '${c.name}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200">
                                     <i class="fa-solid fa-download mr-1"></i> Backup
                                 </button>
                             </td>
@@ -133,7 +177,64 @@
             }
         }
 
-        async function triggerBackup(id, name) {
+        // --- Bulk Actions Feature ---
+        function toggleSelectAll(master) {
+            const checkboxes = document.querySelectorAll('input[name="container-select"]');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+            updateBulkActionBar();
+        }
+
+        function updateBulkActionBar() {
+            const checkboxes = document.querySelectorAll('input[name="container-select"]:checked');
+            const bar = document.getElementById('bulk-action-bar');
+            const countSpan = document.getElementById('selected-count');
+            
+            countSpan.innerText = checkboxes.length;
+            
+            if (checkboxes.length > 0) {
+                bar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+            } else {
+                bar.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+            }
+        }
+
+        // --- Sequential Queue Backup Engine ---
+        async function triggerSingleBackup(id, name) {
+            await runBackupJob(id, name, 1, 1);
+        }
+
+        async function triggerBulkBackup() {
+            const checkboxes = document.querySelectorAll('input[name="container-select"]:checked');
+            const jobs = Array.from(checkboxes).map(cb => ({
+                id: cb.value,
+                name: cb.getAttribute('data-name')
+            }));
+
+            if (jobs.length === 0) return;
+
+            showOverlay("Initializing Bulk Backup", `Preparing to download ${jobs.length} environments...`, 0);
+
+            // Execute sequentially to prevent Docker lock-ups
+            for (let i = 0; i < jobs.length; i++) {
+                const progress = Math.round((i / jobs.length) * 100);
+                showOverlay(
+                    `Backing up (${i + 1}/${jobs.length})`, 
+                    `Packaging volumes and configurations for ${jobs[i].name}...`,
+                    progress
+                );
+                
+                try {
+                    await runBackupJob(jobs[i].id, jobs[i].name, i + 1, jobs.length);
+                } catch (err) {
+                    alert(`Failed to backup ${jobs[i].name}: ${err.message}`);
+                }
+            }
+
+            hideOverlay();
+            loadContainers(); // Refresh list and clear selections
+        }
+
+        async function runBackupJob(id, name, current, total) {
             const includeVolumes = document.getElementById('include-volumes-toggle').checked;
             const pauseContainer = document.getElementById('pause-toggle').checked;
 
@@ -142,81 +243,159 @@
             formData.append("include_volumes", includeVolumes);
             formData.append("pause_during_backup", pauseContainer);
 
-            try {
-                const overlay = document.createElement("div");
-                overlay.className = "fixed inset-0 bg-slate-950/80 flex flex-col justify-center items-center z-50 text-slate-200";
-                overlay.innerHTML = `
-                    <div class="text-center space-y-4">
-                        <i class="fa-solid fa-compact-disc animate-spin text-5xl text-amber-500"></i>
-                        <h3 class="text-lg font-bold">Packaging Container Environment</h3>
-                        <p class="text-sm text-slate-400">Compiling configuration profiles & named volume sets...</p>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                const response = await fetch(`${API_BASE}/api/backup`, {
-                    method: "POST",
-                    body: formData
-                });
-
-                document.body.removeChild(overlay);
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    alert(`Backup Failed: ${err.detail}`);
-                    return;
-                }
-
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${name}_backup.zip`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            } catch (err) {
-                alert(`Error executing export command: ${err.message}`);
+            // Show single backup overlay if not part of a larger bulk set
+            if (total === 1) {
+                showOverlay("Packaging Environment", `Compiling metadata for ${name}...`, 30);
             }
+
+            const response = await fetch(`${API_BASE}/api/backup`, {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                if (total === 1) hideOverlay();
+                throw new Error(err.detail || "Server error");
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name}_backup.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            if (total === 1) hideOverlay();
         }
 
+        // --- Multi-File Restore Queue Engine ---
         const dropzone = document.getElementById("dropzone");
         const fileInput = document.getElementById("file-input");
-        const restoreStatus = document.getElementById("restore-status");
+        const queueContainer = document.getElementById("queue-container");
+        const queueList = document.getElementById("queue-list");
 
         dropzone.addEventListener("click", () => fileInput.click());
-        fileInput.addEventListener("change", handleFileSelection);
+        fileInput.addEventListener("change", handleFileSelections);
 
-        async function handleFileSelection(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        // Supporting drag-and-drop actions natively
+        dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add('border-amber-500'); });
+        dropzone.addEventListener("dragleave", () => dropzone.classList.remove('border-amber-500'));
+        dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('border-amber-500');
+            if (e.dataTransfer.files.length > 0) {
+                processFiles(e.dataTransfer.files);
+            }
+        });
+
+        function handleFileSelections(e) {
+            processFiles(e.target.files);
+        }
+
+        let restoreQueue = [];
+        let isRestoring = false;
+
+        function processFiles(files) {
+            const fileArray = Array.from(files).filter(file => file.name.endsWith('.zip'));
+            if (fileArray.length === 0) return;
+
+            queueContainer.classList.remove('hidden');
+
+            fileArray.forEach(file => {
+                const jobId = 'job-' + Math.random().toString(36).substr(2, 9);
+                const job = {
+                    id: jobId,
+                    file: file,
+                    status: 'pending'
+                };
+                restoreQueue.push(job);
+                addJobToUI(job);
+            });
+
+            processNextRestore();
+        }
+
+        function addJobToUI(job) {
+            const div = document.createElement('div');
+            div.id = job.id;
+            div.className = "bg-slate-900 border border-slate-800 rounded-lg p-3 flex justify-between items-center text-xs";
+            div.innerHTML = `
+                <div class="flex items-center space-x-3 truncate">
+                    <i class="fa-solid fa-file-zipper text-amber-500 text-sm"></i>
+                    <span class="font-medium text-slate-300 truncate">${job.file.name}</span>
+                </div>
+                <div class="status-badge flex items-center space-x-1.5 font-semibold text-slate-400">
+                    <i class="fa-regular fa-clock"></i> <span>Queued</span>
+                </div>
+            `;
+            queueList.appendChild(div);
+        }
+
+        async function processNextRestore() {
+            if (isRestoring) return;
+            
+            const nextJob = restoreQueue.find(job => job.status === 'pending');
+            if (!nextJob) {
+                isRestoring = false;
+                return;
+            }
+
+            isRestoring = true;
+            nextJob.status = 'restoring';
+            updateJobUIStatus(nextJob.id, 'restoring', 'Restoring...', 'text-amber-500', 'fa-solid fa-sync animate-spin');
 
             const formData = new FormData();
-            formData.append("file", file);
-
-            restoreStatus.classList.remove("hidden", "text-rose-500", "text-emerald-500");
-            restoreStatus.className = "mt-4 text-sm text-amber-500 font-medium";
-            restoreStatus.innerHTML = `<i class="fa-solid fa-sync animate-spin mr-1.5"></i> Running restore pipeline...`;
+            formData.append("file", nextJob.file);
 
             try {
                 const response = await fetch(`${API_BASE}/api/restore`, {
                     method: "POST",
                     body: formData
                 });
-
                 const result = await response.json();
+
                 if (response.ok) {
-                    restoreStatus.className = "mt-4 text-sm text-emerald-500 font-semibold";
-                    restoreStatus.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> Success: ${result.message}`;
-                    loadContainers();
+                    nextJob.status = 'completed';
+                    updateJobUIStatus(nextJob.id, 'completed', 'Completed', 'text-emerald-500', 'fa-solid fa-circle-check');
                 } else {
-                    restoreStatus.className = "mt-4 text-sm text-rose-500 font-semibold";
-                    restoreStatus.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1.5"></i> Restore failed: ${result.detail}`;
+                    nextJob.status = 'failed';
+                    updateJobUIStatus(nextJob.id, 'failed', `Failed: ${result.detail}`, 'text-rose-500', 'fa-solid fa-circle-xmark');
                 }
             } catch (err) {
-                restoreStatus.className = "mt-4 text-sm text-rose-500 font-semibold";
-                restoreStatus.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Connection failed: ${err.message}`;
+                nextJob.status = 'failed';
+                updateJobUIStatus(nextJob.id, 'failed', `Error: ${err.message}`, 'text-rose-500', 'fa-solid fa-triangle-exclamation');
             }
+
+            loadContainers(); // Refresh list to show newly restored container
+            isRestoring = false;
+            processNextRestore(); // Trigger next file in queue
+        }
+
+        function updateJobUIStatus(jobId, status, text, colorClass, iconClass) {
+            const jobDiv = document.getElementById(jobId);
+            if (!jobDiv) return;
+            const badge = jobDiv.querySelector('.status-badge');
+            badge.className = `status-badge flex items-center space-x-1.5 font-semibold ${colorClass}`;
+            badge.innerHTML = `<i class="${iconClass}"></i> <span>${text}</span>`;
+        }
+
+        // --- Helpers for Modal Progress Overlays ---
+        function showOverlay(title, desc, progress) {
+            const overlay = document.getElementById('progress-overlay');
+            document.getElementById('overlay-title').innerText = title;
+            document.getElementById('overlay-desc').innerText = desc;
+            document.getElementById('overlay-progress-bar').style.width = `${progress}%`;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        }
+
+        function hideOverlay() {
+            const overlay = document.getElementById('progress-overlay');
+            overlay.classList.remove('flex');
+            overlay.classList.add('hidden');
         }
 
         window.onload = loadContainers;
