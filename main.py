@@ -1,4 +1,4 @@
-# main.py - Enterprise-Grade DockMove API Orchestrator (Full Stack & Image Support)
+# main.py - Enterprise-Grade DockMove API Orchestrator (With WordPress Auto-Heal)
 import os
 import tarfile
 import tempfile
@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import docker
 
-app = FastAPI(title="DockMove API Service", version="2.1.0")
+app = FastAPI(title="DockMove API Service", version="2.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,6 +26,7 @@ try:
 except Exception as e:
     print(f"Error connecting to Docker Host Daemon: {e}")
     client = None
+
 
 def check_for_unsafe_tags(image_string: str) -> bool:
     """
@@ -43,6 +44,89 @@ def check_for_unsafe_tags(image_string: str) -> bool:
         return True
         
     return False
+
+
+def heal_wp_config(file_path: str):
+    """
+    Injects dynamic HTTP_HOST detection into wp-config.php to prevent port/IP 
+    redirection lockouts when migrating between servers.
+    """
+    try:
+        with open(file_path, 'r', errors='ignore') as f:
+            content = f.read()
+        
+        # Guard clause: Don't double inject if already auto-healed
+        if "WP_HOME" in content and "$_SERVER['HTTP_HOST']" in content:
+            return
+
+        insertion_marker = "/* That's all, stop editing! Happy publishing. */"
+        override_code = (
+            "\n"
+            "/** Added dynamically by DockMove Auto-Heal to support multi-port migration **/\n"
+            "if (isset($_SERVER['HTTP_HOST'])) {\n"
+            "    define('WP_HOME', 'http://' . $_SERVER['HTTP_HOST']);\n"
+            "    define('WP_SITEURL', 'http://' . $_SERVER['HTTP_HOST']);\n"
+            "}\n"
+        )
+        
+        if insertion_marker in content:
+            content = content.replace(insertion_marker, f"{override_code}\n{insertion_marker}")
+        else:
+            content += override_code
+            
+        with open(file_path, 'w') as f:
+            f.write(content)
+        print(f"[DockMove Auto-Heal] Successfully updated dynamic URL rules in: {file_path}")
+    except Exception as e:
+        print(f"[DockMove Auto-Heal] Error patching wp-config.php: {e}")
+
+
+def prepare_and_heal_volume(temp_dir: str, vol_filename: str):
+    """
+    Inspects volume raw structures, unpackages inner backup payload, runs the 
+    auto-heal algorithms (WordPress/wp-config), and repacks cleanly for restoration.
+    """
+    tar_archive_path = os.path.join(temp_dir, "volumes", vol_filename)
+    if not os.path.exists(tar_archive_path):
+        return
+        
+    vol_extract_temp = os.path.join(temp_dir, f"extracted_{vol_filename.replace('.', '_')}")
+    os.makedirs(vol_extract_temp, exist_ok=True)
+    
+    try:
+        # Extract outer nested payload (contains the container's sidecar-produced backup.tar)
+        with tarfile.open(tar_archive_path, 'r') as outer_tar:
+            outer_tar.extractall(vol_extract_temp)
+        
+        inner_tar_path = os.path.join(vol_extract_temp, "backup.tar")
+        if os.path.exists(inner_tar_path):
+            files_extract_temp = os.path.join(vol_extract_temp, "files")
+            os.makedirs(files_extract_temp, exist_ok=True)
+            
+            # Extract actual volume files
+            with tarfile.open(inner_tar_path, 'r') as inner_tar:
+                inner_tar.extractall(files_extract_temp)
+            
+            # Scan files for WordPress configurations to heal
+            wp_config_healed = False
+            for root, dirs, files in os.walk(files_extract_temp):
+                if "wp-config.php" in files:
+                    wp_path = os.path.join(root, "wp-config.php")
+                    heal_wp_config(wp_path)
+                    wp_config_healed = True
+            
+            # If we auto-healed a config file, repack the tarballs so they get restored properly
+            if wp_config_healed:
+                os.remove(inner_tar_path)
+                with tarfile.open(inner_tar_path, 'w') as inner_tar:
+                    inner_tar.add(files_extract_temp, arcname=".")
+                
+                os.remove(tar_archive_path)
+                with tarfile.open(tar_archive_path, 'w') as outer_tar:
+                    outer_tar.add(inner_tar_path, arcname="backup.tar")
+                    
+    except Exception as e:
+        print(f"[DockMove Auto-Heal] Warning: Error during volume scanning: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -140,34 +224,28 @@ async def execute_backup(
         temp_dir = tempfile.mkdtemp()
         backup_zip_path = os.path.join(temp_dir, f"{name}_dockmove_backup.zip")
 
-        # 1. Generate Metadata & Docker Compose Blueprint
         compose_yaml = generate_compose_blueprint(attrs)
         
-        # 2. Safely Pause Container (Critical for database integrity)
         if pause_during_backup and container.status == "running":
             container.pause()
 
         with zipfile.ZipFile(backup_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Save docker-compose.yml
             compose_file_path = os.path.join(temp_dir, "docker-compose.yml")
             with open(compose_file_path, "w") as f:
                 f.write(compose_yaml)
             zipf.write(compose_file_path, "docker-compose.yml")
 
-            # Save metadata.json (includes detailed network & volume info)
             metadata_path = os.path.join(temp_dir, "metadata.json")
             with open(metadata_path, "w") as f:
                 json.dump(attrs, f, indent=4)
             zipf.write(metadata_path, "metadata.json")
 
-            # 3. Stream & Extract Volume Data natively
             if include_volumes:
                 for mount in attrs.get('Mounts', []):
                     if mount['Type'] == 'volume':
                         volume_name = mount['Name']
                         tar_file_path = os.path.join(temp_dir, f"volume_{volume_name}.tar")
                         
-                        # Use an Alpine sidecar container to archive volume contents safely
                         sidecar = client.containers.run(
                             "alpine:latest",
                             command=f"tar -cf /backup.tar -C {mount['Destination']} .",
@@ -176,21 +254,16 @@ async def execute_backup(
                             remove=False
                         )
                         
-                        # Wait explicitly for the tarring sidecar run to finish processing
                         sidecar.wait()
                         
-                        # Retrieve the tar archive stream from the sidecar
                         ststream, stat = sidecar.get_archive("/backup.tar")
                         with open(tar_file_path, "wb") as f:
                             for chunk in ststream:
                                 f.write(chunk)
                         
                         sidecar.remove()
-                        
-                        # Pack the volume tar archive into the final .zip bundle
                         zipf.write(tar_file_path, f"volumes/volume_{volume_name}.tar")
         
-        # 4. Unpause Container
         if pause_during_backup:
             try:
                 container.reload()
@@ -216,7 +289,7 @@ async def execute_backup(
 async def backup_compose_project(
     project_name: str = Form(...),
     include_volumes: bool = Form(True),
-    include_images: bool = Form(False),  # Optional image freezing toggle
+    include_images: bool = Form(False),
     pause_during_backup: bool = Form(True)
 ):
     """Backs up an entire Docker Compose stack dynamically grouped under a project name."""
@@ -236,7 +309,6 @@ async def backup_compose_project(
         temp_dir = tempfile.mkdtemp()
         backup_zip_path = os.path.join(temp_dir, f"project_{project_name}_backup.zip")
 
-        # Safely pause running resources
         paused_containers = []
         if pause_during_backup:
             for container in project_containers:
@@ -260,12 +332,10 @@ async def backup_compose_project(
                 service_name = container.labels.get("com.docker.compose.service", container.name)
                 image_tag = attrs['Config']['Image']
                 
-                # Check for tag safety
                 is_unsafe = check_for_unsafe_tags(image_tag)
                 if is_unsafe:
                     unsafe_tag_found = True
                 
-                # Sanitize name for filename use
                 safe_image_filename = image_tag.replace("/", "_").replace(":", "-") + ".tar"
 
                 service_meta = {
@@ -280,7 +350,6 @@ async def backup_compose_project(
                     "mounts": []
                 }
 
-                # 1. Export the Exact Docker Image Layers (only if user opted-in)
                 if include_images and image_tag not in processed_images:
                     processed_images.add(image_tag)
                     image_tar_path = os.path.join(temp_dir, safe_image_filename)
@@ -295,7 +364,6 @@ async def backup_compose_project(
                         print(f"Warning: Could not save image layers for {image_tag}: {img_err}")
                         service_meta["image_filename"] = None
 
-                # 2. Back up Volumes
                 for mount in attrs.get('Mounts', []):
                     if mount['Type'] == 'volume':
                         vol_name = mount['Name']
@@ -325,11 +393,9 @@ async def backup_compose_project(
 
                 stack_metadata["services"].append(service_meta)
 
-            # Global migration alert check
             if unsafe_tag_found:
                 stack_metadata["migration_safety_warning"] = True
 
-            # Metadata and compose structure outputs
             metadata_file_path = os.path.join(temp_dir, "stack_metadata.json")
             with open(metadata_file_path, "w") as f:
                 json.dump(stack_metadata, f, indent=4)
@@ -341,7 +407,6 @@ async def backup_compose_project(
                 f.write(compose_yaml)
             zipf.write(compose_file_path, "docker-compose.yml")
 
-        # Resume original stack execution
         if pause_during_backup:
             for container in paused_containers:
                 try:
@@ -398,7 +463,7 @@ async def execute_restore(file: UploadFile = File(...)):
 
 
 async def run_restore_single(temp_dir: str):
-    """Executes single container restore."""
+    """Executes single container restore with active auto-healing."""
     metadata_path = os.path.join(temp_dir, "metadata.json")
     with open(metadata_path, "r") as f:
         metadata = json.load(f)
@@ -419,7 +484,7 @@ async def run_restore_single(temp_dir: str):
             network = client.networks.create(net_name, driver="bridge")
         restored_networks.append((network, net_data))
 
-    # 3. Create volumes & restore archived files
+    # 3. Create volumes, scan/auto-heal configs, & restore archived files
     mounts = metadata.get('Mounts', [])
     volume_binds = {}
     for mount in mounts:
@@ -430,8 +495,13 @@ async def run_restore_single(temp_dir: str):
             client.volumes.create(name=vol_name)
             volume_binds[vol_name] = {'bind': dest, 'mode': 'rw'}
             
-            tar_archive_path = os.path.join(temp_dir, "volumes", f"volume_{vol_name}.tar")
+            vol_filename = f"volume_{vol_name}.tar"
+            tar_archive_path = os.path.join(temp_dir, "volumes", vol_filename)
+            
             if os.path.exists(tar_archive_path):
+                # Run the Auto-Heal engine on the volume contents before injection
+                prepare_and_heal_volume(temp_dir, vol_filename)
+                
                 sidecar = client.containers.run(
                     "alpine:latest",
                     command="sleep 3600",
@@ -483,7 +553,7 @@ async def run_restore_single(temp_dir: str):
 
 
 async def run_restore_project(temp_dir: str):
-    """Restores an entire compose stack, side-loading any frozen docker layers, volumes, and networks."""
+    """Restores an entire compose stack with auto-healing and side-loaded image layers."""
     metadata_path = os.path.join(temp_dir, "stack_metadata.json")
     with open(metadata_path, "r") as f:
         stack_metadata = json.load(f)
@@ -507,12 +577,11 @@ async def run_restore_project(temp_dir: str):
                     with open(tar_path, 'rb') as f:
                         client.images.load(f.read())
 
-    # 3. Process volumes and create containers
+    # 3. Process volumes, auto-heal configurations, and create containers
     for service in stack_metadata["services"]:
         image = service["image"]
         service_name = service["service_name"]
         
-        # Fallback pull if the package omitted images or it's missing
         if not stack_metadata.get("images_included", False):
             client.images.pull(image)
 
@@ -525,8 +594,13 @@ async def run_restore_project(temp_dir: str):
                 client.volumes.create(name=vol_name)
                 volume_binds[vol_name] = {'bind': dest, 'mode': 'rw'}
                 
-                tar_archive_path = os.path.join(temp_dir, "volumes", f"vol_{vol_name}.tar")
+                vol_filename = f"vol_{vol_name}.tar"
+                tar_archive_path = os.path.join(temp_dir, "volumes", vol_filename)
+                
                 if os.path.exists(tar_archive_path):
+                    # Run the Auto-Heal engine on the stack volumes before injection
+                    prepare_and_heal_volume(temp_dir, vol_filename)
+                    
                     sidecar = client.containers.run(
                         "alpine:latest",
                         command="sleep 3600",
@@ -548,7 +622,6 @@ async def run_restore_project(temp_dir: str):
                 if host_ports:
                     formatted_ports[container_port] = host_ports[0]['HostPort']
 
-        # Create container explicitly referencing the project namespace
         restored_container = client.containers.create(
             image,
             name=service["container_name"],
@@ -565,7 +638,7 @@ async def run_restore_project(temp_dir: str):
         network.connect(restored_container, aliases=[service_name])
         restored_container.start()
 
-    return {"status": "success", "message": f"Stack '{project_name}' completely restored using local image layers!"}
+    return {"status": "success", "message": f"Stack '{project_name}' completely restored using auto-healed configurations!"}
 
 
 def generate_compose_blueprint(attrs: dict) -> str:
@@ -593,7 +666,6 @@ def generate_compose_blueprint(attrs: dict) -> str:
         if mapped_ports:
             service[name]["ports"] = mapped_ports
 
-    # Extract original network configurations for Compose output
     networks = list(attrs['NetworkSettings'].get('Networks', {}).keys())
     if networks:
         service[name]["networks"] = networks
@@ -662,5 +734,5 @@ def generate_project_compose(stack_metadata: dict) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    # Serves traffic on internal port 8080 (Mapped via docker-compose on port 6767)
+    # Serves traffic on internal port 6767
     uvicorn.run("main:app", host="0.0.0.0", port=6767, reload=False)
