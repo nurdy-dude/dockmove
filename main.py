@@ -258,7 +258,7 @@ async def execute_restore(file: UploadFile = File(...)):
 
         return {"status": "success", "message": f"Container '{name}' and all dependent volumes/networks restored successfully!"}
 
-except Exception as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Restore pipeline failed: {str(e)}")
 
 def generate_compose_blueprint(attrs: dict) -> str:
@@ -302,4 +302,4 @@ def generate_compose_blueprint(attrs: dict) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=6767, reload=False)
