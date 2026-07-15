@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  dockmove:
+    image: ghcr.io/nurdy-dude/dockmove:latest
+    container_name: dockmove
+    restart: unless-stopped
+    ports:
+      - "6767:6767"
+    volumes:
+      # CRITICAL: Connection socket map allows container orchestration control
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Target host system path tracking for bind mounts preservation
+      - /var/lib/docker/volumes:/var/lib/docker/volumes:ro
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
