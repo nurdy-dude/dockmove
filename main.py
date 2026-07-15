@@ -1,4 +1,3 @@
-# main.py - Production-Ready DockMove API Orchestrator (FastAPI & Docker SDK)
 import os
 import tarfile
 import tempfile
@@ -12,7 +11,6 @@ import docker
 
 app = FastAPI(title="DockMove API Service", version="1.0.0")
 
-# Allow Web UI integration 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serves the index.html landing page at the root route
 @app.get("/")
 def read_index():
     if os.path.exists("index.html"):
@@ -30,7 +27,6 @@ def read_index():
             return HTMLResponse(content=f.read(), status_code=200)
     raise HTTPException(status_code=404, detail="index.html not found")
 
-# Connect natively to host Docker Daemon via socket
 try:
     client = docker.from_env()
 except Exception as e:
@@ -79,39 +75,31 @@ async def execute_backup(
         attrs = container.attrs
         name = container.name
 
-        # Temporary work directory
         temp_dir = tempfile.mkdtemp()
         backup_zip_path = os.path.join(temp_dir, f"{name}_dockmove_backup.zip")
 
-        # 1. Gather Metadata & Produce standard YAML Blueprint
         compose_yaml = generate_compose_blueprint(attrs)
         
-        # 2. Halt/Pause Container securely to avoid database corruption
         if pause_during_backup and container.status == "running":
             container.pause()
 
-        # Compile bundle archives
         with zipfile.ZipFile(backup_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Write standard docker-compose file inside zip root
             compose_file_path = os.path.join(temp_dir, "docker-compose.yml")
             with open(compose_file_path, "w") as f:
                 f.write(compose_yaml)
             zipf.write(compose_file_path, "docker-compose.yml")
 
-            # Write system properties JSON
             metadata_path = os.path.join(temp_dir, "metadata.json")
             with open(metadata_path, "w") as f:
                 json.dump(attrs, f, indent=4)
             zipf.write(metadata_path, "metadata.json")
 
-            # 3. Pull Data from Mapped named Volumes / Bind directories
             if include_volumes:
                 for mount in attrs['Mounts']:
                     if mount['Type'] == 'volume':
                         volume_name = mount['Name']
                         tar_file_path = os.path.join(temp_dir, f"volume_{volume_name}.tar")
                         
-                        # High-speed export payload using system-neutral sidecar tar
                         client.containers.run(
                             "alpine:latest",
                             command=f"tar -cf /volume_{volume_name}.tar -C {mount['Destination']} .",
@@ -120,7 +108,6 @@ async def execute_backup(
                             remove=True
                         )
         
-        # Resurrect runtime container from paused state
         if pause_during_backup and container.status == "paused":
             container.unpause()
 
@@ -143,12 +130,10 @@ def generate_compose_blueprint(attrs: dict) -> str:
         }
     }
     
-    # Extract Env settings
     envs = attrs['Config'].get('Env', [])
     if envs:
         service[name]["environment"] = [e for e in envs]
 
-    # Map ports
     ports_map = attrs['NetworkSettings'].get('Ports', {})
     if ports_map:
         mapped_ports = []
@@ -164,8 +149,6 @@ def generate_compose_blueprint(attrs: dict) -> str:
     }
     return yaml.dump(compose_data, default_flow_style=False)
 
-# This block is what keeps your container running and listening for web requests
 if __name__ == "__main__":
     import uvicorn
-    # Bind to 0.0.0.0 internally on port 8080 (which you map to 6767 via compose)
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=6767, reload=False)
