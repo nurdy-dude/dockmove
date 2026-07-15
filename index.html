@@ -1,404 +1,614 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DockMove Dashboard</title>
-    <!-- Tailwind CSS CDN -->
+    <title>DockMove Management Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .code-font { font-family: 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fffbeb',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                            900: '#78350f',
+                        },
+                        terminal: '#020617'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
+<body class="bg-slate-950 text-slate-100 min-h-full flex flex-col">
 
-    <!-- Header navigation bar -->
-    <nav class="border-b border-slate-800 bg-slate-950 px-6 py-4">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <div class="bg-amber-500 p-2 rounded-lg text-slate-950">
-                    <i class="fa-solid fa-truck-ramp-box text-xl"></i>
+    <header class="border-b border-slate-800 bg-slate-900/40 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-500 text-slate-950 p-2 rounded-xl shadow-lg shadow-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-server text-lg"></i>
                 </div>
-                <span class="text-xl font-bold tracking-wider text-amber-400">dockmove</span>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-base tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">dockmove</span>
+                        <span class="text-[9px] bg-brand-500/10 text-brand-500 border border-brand-500/20 px-1.5 py-0.5 rounded font-semibold">ENTERPRISE V2</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Docker Host Migration & Backup Pipeline</p>
+                </div>
             </div>
-            <div class="text-sm bg-slate-800 px-3 py-1 rounded-full text-slate-300">
-                <span class="inline-block w-2.5 h-2.5 bg-emerald-500 rounded-full mr-2"></span>Host Connection: Online
+            <div class="flex items-center gap-2">
+                <span id="backend-badge" class="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                    API Offline
+                </span>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <!-- Content workspace -->
-    <main class="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
-        
-        <!-- Bulk Action Bar (Hidden by default, slides up when containers are selected) -->
-        <div id="bulk-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-950 border border-amber-500/30 px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-6 z-40 transition-all duration-300 translate-y-24 opacity-0 pointer-events-none">
-            <span class="text-sm font-medium text-slate-300"><span id="selected-count" class="text-amber-400 font-bold">0</span> containers selected</span>
-            <button onclick="triggerBulkBackup()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition duration-200 flex items-center gap-2">
-                <i class="fa-solid fa-download"></i> Backup Selected
-            </button>
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+        <div id="status-toast" class="hidden rounded-xl p-4 flex items-start gap-3 border transition-all">
+            <div id="toast-icon-box" class="p-2 rounded-lg flex items-center justify-center text-sm"></div>
+            <div class="flex-1">
+                <h4 id="toast-title" class="text-xs font-semibold">Notification</h4>
+                <p id="toast-message" class="text-[11px] mt-0.5 text-slate-300"></p>
+            </div>
+            <button onclick="hideToast()" class="text-slate-400 hover:text-slate-200 text-xs mt-0.5"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
-        <!-- Dashboard Grid Layout -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <!-- Left Side: Container Discovery List -->
-            <div class="lg:col-span-2 bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-lg font-semibold flex items-center gap-2">
-                        <i class="fa-solid fa-cubes text-amber-500"></i> Active Host Containers
-                    </h2>
-                    <button onclick="loadContainers()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition">
-                        <i class="fa-solid fa-rotate mr-1.5"></i> Refresh List
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- Workspace Tabs -->
+                <div class="flex border-b border-slate-800">
+                    <button id="tab-stacks" onclick="switchTab('stacks')" class="px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2">
+                        <i class="fa-solid fa-cubes"></i> Compose Stacks
+                    </button>
+                    <button id="tab-containers" onclick="switchTab('containers')" class="px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-cube"></i> Single Containers
                     </button>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm text-slate-300">
-                        <thead>
-                            <tr class="border-b border-slate-800 text-slate-400 font-medium">
-                                <th class="pb-3 w-10">
-                                    <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)" class="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500 cursor-pointer">
-                                </th>
-                                <th class="pb-3">Container Name</th>
-                                <th class="pb-3">Docker Image</th>
-                                <th class="pb-3">Status</th>
-                                <th class="pb-3 text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="container-list" class="divide-y divide-slate-900">
-                            <tr>
-                                <td colspan="5" class="py-6 text-center text-slate-500">Scanning host daemon...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Right Side: Restoration Pipeline and Settings -->
-            <div class="space-y-8">
-                <!-- Migration Backup Settings panel -->
-                <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
-                    <h3 class="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-sliders text-amber-500"></i> Backup Configurations
-                    </h3>
-                    <div class="space-y-4 text-sm text-slate-300">
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input id="include-volumes-toggle" type="checkbox" checked class="w-4.5 h-4.5 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500">
-                            <span>Package Named Volumes</span>
-                        </label>
-                        <label class="flex items-center space-x-3 cursor-pointer">
-                            <input id="pause-toggle" type="checkbox" checked class="w-4.5 h-4.5 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500">
-                            <span>Pause Container during execution</span>
-                        </label>
+                <!-- Stacks View Panel -->
+                <div id="panel-stacks" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                        <div>
+                            <h3 class="font-semibold text-sm flex items-center gap-2 text-brand-500">
+                                <i class="fa-solid fa-layer-group"></i> Active Compose Stacks
+                            </h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Discovered Docker Compose projects on host daemon</p>
+                        </div>
+                        <button onclick="scanWorkspace()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Rescan
+                        </button>
                     </div>
-                </div>
 
-                <!-- Recovery Dropzone pipeline -->
-                <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-xl">
-                    <h3 class="text-md font-semibold text-slate-200 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-cloud-arrow-up text-amber-500"></i> Restore Container Pipeline
-                    </h3>
-                    <div id="dropzone" class="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-lg p-6 text-center cursor-pointer transition bg-slate-900/50">
-                        <i class="fa-solid fa-box-archive text-3xl text-slate-600 mb-3"></i>
-                        <p class="text-sm font-medium">Click to select backup archives</p>
-                        <p class="text-xs text-slate-500 mt-1">Accepts multiple .zip files at once</p>
-                        <!-- Added 'multiple' tag here -->
-                        <input type="file" id="file-input" class="hidden" accept=".zip" multiple>
-                    </div>
-                    
-                    <!-- Restore Queue View -->
-                    <div id="queue-container" class="mt-6 space-y-3 hidden">
-                        <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Restoration Queue</h4>
-                        <div id="queue-list" class="space-y-2">
-                            <!-- Populated dynamically via JS -->
+                    <div id="stacks-target" class="space-y-4">
+                        <div class="text-center py-8 text-slate-500 text-xs">
+                            <i class="fa-solid fa-circle-notch animate-spin text-lg text-brand-500 mb-2 block mx-auto"></i>
+                            Discovering compose environments...
                         </div>
                     </div>
                 </div>
+
+                <!-- Containers View Panel -->
+                <div id="panel-containers" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm hidden">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                        <div>
+                            <h3 class="font-semibold text-sm flex items-center gap-2 text-slate-200">
+                                <i class="fa-solid fa-cube"></i> Individual Containers
+                            </h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Single standalone containers detected on physical host</p>
+                        </div>
+                        <button onclick="scanWorkspace()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Rescan
+                        </button>
+                    </div>
+
+                    <div id="containers-target" class="space-y-3">
+                        <div class="text-center py-8 text-slate-500 text-xs">
+                            <i class="fa-solid fa-circle-notch animate-spin text-lg text-brand-500 mb-2 block mx-auto"></i>
+                            Discovering standalone containers...
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- Dynamic Export Overlay/Settings Card -->
+                <div id="backup-card" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hidden transition-all">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                        <div>
+                            <h3 id="target-title-label" class="font-semibold text-sm flex items-center gap-1.5 text-brand-500">
+                                <i class="fa-solid fa-gears"></i> Export Settings
+                            </h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5" id="target-sub-label">Target: None</p>
+                        </div>
+                        <button onclick="closeBackupSettings()" class="text-xs text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <input type="hidden" id="selected-target-id">
+                        <input type="hidden" id="selected-target-type"> <!-- 'container' or 'project' -->
+                        
+                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                            <input type="checkbox" id="backup-opt-vols" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                            <div>
+                                <p class="text-xs font-medium text-slate-200">Archive Bound Volumes</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">Captures full filesystem state inside named volumes</p>
+                            </div>
+                        </label>
+
+                        <label id="image-freeze-wrapper" class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                            <input type="checkbox" id="backup-opt-images" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                            <div>
+                                <p class="text-xs font-medium text-slate-200">Freeze Exact Docker Images</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">Bundles local binary layers directly into backup ZIP</p>
+                            </div>
+                        </label>
+
+                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                            <input type="checkbox" id="backup-opt-pause" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                            <div>
+                                <p class="text-xs font-medium text-slate-200">Pause during backup</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">Halts execution writes to avoid database block splits</p>
+                            </div>
+                        </label>
+
+                        <button id="btn-backup-submit" onclick="executeBackupProcess()" class="w-full bg-brand-500 hover:bg-brand-600 text-slate-950 py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg shadow-brand-500/10 flex items-center justify-center gap-2 transition-all">
+                            <i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Unified Restoration dropzone panel -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="mb-4 pb-3 border-b border-slate-800">
+                        <h3 class="font-semibold text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-upload text-brand-500"></i>
+                            Restore Pipeline Workspace
+                        </h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Drag any DockMove zip here to rebuild stack or container</p>
+                    </div>
+
+                    <div id="drop-area" class="border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group">
+                        <input type="file" id="file-input-raw" class="hidden" accept=".zip">
+                        <i class="fa-solid fa-box-open text-slate-600 group-hover:text-brand-500 text-3xl mb-3 transition-colors"></i>
+                        <p class="text-xs font-semibold text-slate-300">Drag & Drop Backup ZIP</p>
+                        <p class="text-[10px] text-slate-500 mt-1">Accepts raw single-container or complete stack ZIPs</p>
+                    </div>
+
+                    <div id="restore-progress-frame" class="hidden mt-4 bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 truncate">
+                                <i class="fa-solid fa-compact-disc text-brand-500 animate-spin"></i>
+                                <span class="text-xs font-medium text-slate-200 truncate" id="restore-file-lbl">Loading Archive...</span>
+                            </div>
+                            <button onclick="clearRestoreFile()" class="text-xs text-slate-500 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                        <button id="btn-restore-submit" onclick="executeRestoreProcess()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-2 px-3 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Real-time pipeline logs console -->
+                <div class="bg-terminal border border-slate-800 rounded-2xl p-4 flex flex-col h-[240px] shadow-sm">
+                    <div class="flex items-center justify-between border-b border-slate-800/60 pb-2 mb-2">
+                        <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            System Pipeline Feed
+                        </span>
+                        <button onclick="clearLogs()" class="text-[9px] text-slate-500 hover:text-slate-300">Clear Logs</button>
+                    </div>
+                    <div id="logs-feed" class="flex-1 overflow-y-auto text-[11px] code-font text-sky-400 space-y-1 pr-1">
+                        <p class="text-slate-500">[SYS] Ready.</p>
+                    </div>
+                </div>
+
+            </div>
         </div>
+
     </main>
 
-    <!-- Progress Overlay -->
-    <div id="progress-overlay" class="fixed inset-0 bg-slate-950/85 flex-col justify-center items-center z-50 text-slate-200 hidden">
-        <div class="text-center space-y-4 max-w-md px-6">
-            <i class="fa-solid fa-compact-disc animate-spin text-5xl text-amber-500"></i>
-            <h3 id="overlay-title" class="text-lg font-bold">Processing</h3>
-            <p id="overlay-desc" class="text-sm text-slate-400">Please wait...</p>
-            <div class="w-full bg-slate-800 rounded-full h-2 mt-2">
-                <div id="overlay-progress-bar" class="bg-amber-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Core Javascript APIs -->
     <script>
-        const API_BASE = ""; 
-        let containerData = [];
+        const BACKEND_URL = window.location.origin;
+        let activeTab = 'stacks';
+        let fileToRestore = null;
 
-        async function loadContainers() {
-            const tbody = document.getElementById("container-list");
-            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400"><i class="fa-solid fa-spinner animate-spin mr-2"></i> Fetching details...</td></tr>`;
-            document.getElementById('select-all').checked = false;
-            updateBulkActionBar();
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/containers`);
-                containerData = await response.json();
-                
-                if (containerData.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500">No containers found on target system.</td></tr>`;
-                    return;
-                }
+        function switchTab(tabId) {
+            activeTab = tabId;
+            const btnStacks = document.getElementById('tab-stacks');
+            const btnContainers = document.getElementById('tab-containers');
+            const panelStacks = document.getElementById('panel-stacks');
+            const panelContainers = document.getElementById('panel-containers');
 
-                tbody.innerHTML = "";
-                containerData.forEach(c => {
-                    const statusColor = c.status === "running" ? "text-emerald-500" : "text-slate-500";
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-900/50 transition duration-150">
-                            <td class="py-4">
-                                <input type="checkbox" name="container-select" value="${c.id}" data-name="${c.name}" onclick="updateBulkActionBar()" class="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700 focus:ring-amber-500 cursor-pointer">
-                            </td>
-                            <td class="py-4 font-semibold text-slate-200">${c.name}</td>
-                            <td class="py-4 text-slate-400 font-mono text-xs">${c.image}</td>
-                            <td class="py-4">
-                                <span class="flex items-center text-xs font-semibold ${statusColor}">
-                                    <span class="inline-block w-2 h-2 rounded-full mr-2 bg-current"></span>${c.status}
-                                </span>
-                            </td>
-                            <td class="py-4 text-right">
-                                <button onclick="triggerSingleBackup('${c.id}', '${c.name}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200">
-                                    <i class="fa-solid fa-download mr-1"></i> Backup
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-rose-500"><i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Call failed: Ensure docker.sock is mounted correctly.</td></tr>`;
-            }
-        }
-
-        // --- Bulk Actions Feature ---
-        function toggleSelectAll(master) {
-            const checkboxes = document.querySelectorAll('input[name="container-select"]');
-            checkboxes.forEach(cb => cb.checked = master.checked);
-            updateBulkActionBar();
-        }
-
-        function updateBulkActionBar() {
-            const checkboxes = document.querySelectorAll('input[name="container-select"]:checked');
-            const bar = document.getElementById('bulk-action-bar');
-            const countSpan = document.getElementById('selected-count');
-            
-            countSpan.innerText = checkboxes.length;
-            
-            if (checkboxes.length > 0) {
-                bar.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+            if (tabId === 'stacks') {
+                btnStacks.className = "px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2";
+                btnContainers.className = "px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
+                panelStacks.classList.remove('hidden');
+                panelContainers.classList.add('hidden');
             } else {
-                bar.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+                btnContainers.className = "px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2";
+                btnStacks.className = "px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
+                panelContainers.classList.remove('hidden');
+                panelStacks.classList.add('hidden');
             }
         }
 
-        // --- Sequential Queue Backup Engine ---
-        async function triggerSingleBackup(id, name) {
-            await runBackupJob(id, name, 1, 1);
+        function writeLog(text, category = 'info') {
+            const feed = document.getElementById('logs-feed');
+            const p = document.createElement('p');
+            let color = 'text-slate-400';
+            if (category === 'sys') color = 'text-slate-500';
+            if (category === 'success') color = 'text-emerald-400 font-semibold';
+            if (category === 'warn') color = 'text-amber-400';
+            if (category === 'err') color = 'text-red-400 font-semibold';
+            p.className = `${color}`;
+            p.innerHTML = `[${new Date().toLocaleTimeString()}] ${text}`;
+            feed.appendChild(p);
+            feed.scrollTop = feed.scrollHeight;
         }
 
-        async function triggerBulkBackup() {
-            const checkboxes = document.querySelectorAll('input[name="container-select"]:checked');
-            const jobs = Array.from(checkboxes).map(cb => ({
-                id: cb.value,
-                name: cb.getAttribute('data-name')
-            }));
+        function clearLogs() {
+            document.getElementById('logs-feed').innerHTML = '<p class="text-slate-500">[SYS] Logs cleared.</p>';
+        }
 
-            if (jobs.length === 0) return;
-
-            showOverlay("Initializing Bulk Backup", `Preparing to download ${jobs.length} environments...`, 0);
-
-            // Execute sequentially to prevent Docker lock-ups
-            for (let i = 0; i < jobs.length; i++) {
-                const progress = Math.round((i / jobs.length) * 100);
-                showOverlay(
-                    `Backing up (${i + 1}/${jobs.length})`, 
-                    `Packaging volumes and configurations for ${jobs[i].name}...`,
-                    progress
-                );
-                
-                try {
-                    await runBackupJob(jobs[i].id, jobs[i].name, i + 1, jobs.length);
-                } catch (err) {
-                    alert(`Failed to backup ${jobs[i].name}: ${err.message}`);
-                }
+        function showToast(title, msg, type = 'info') {
+            const toast = document.getElementById('status-toast');
+            const iconBox = document.getElementById('toast-icon-box');
+            toast.className = "rounded-xl p-4 flex items-start gap-3 border transition-all block";
+            if (type === 'err') {
+                toast.classList.add("bg-red-950/30", "border-red-500/20", "text-red-200");
+                iconBox.className = "p-2 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
+            } else if (type === 'success') {
+                toast.classList.add("bg-emerald-950/30", "border-emerald-500/20", "text-emerald-200");
+                iconBox.className = "p-2 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            } else {
+                toast.classList.add("bg-slate-900/60", "border-slate-800", "text-slate-200");
+                iconBox.className = "p-2 rounded-lg bg-brand-500/10 text-brand-500 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
             }
-
-            hideOverlay();
-            loadContainers(); // Refresh list and clear selections
+            document.getElementById('toast-title').textContent = title;
+            document.getElementById('toast-message').textContent = msg;
         }
 
-        async function runBackupJob(id, name, current, total) {
-            const includeVolumes = document.getElementById('include-volumes-toggle').checked;
-            const pauseContainer = document.getElementById('pause-toggle').checked;
-
-            const formData = new FormData();
-            formData.append("container_id", id);
-            formData.append("include_volumes", includeVolumes);
-            formData.append("pause_during_backup", pauseContainer);
-
-            // Show single backup overlay if not part of a larger bulk set
-            if (total === 1) {
-                showOverlay("Packaging Environment", `Compiling metadata for ${name}...`, 30);
-            }
-
-            const response = await fetch(`${API_BASE}/api/backup`, {
-                method: "POST",
-                body: formData
-            });
-
-            if (!response.ok) {
-                const err = await response.json();
-                if (total === 1) hideOverlay();
-                throw new Error(err.detail || "Server error");
-            }
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${name}_backup.zip`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-
-            if (total === 1) hideOverlay();
+        function hideToast() {
+            document.getElementById('status-toast').classList.add('hidden');
         }
 
-        // --- Multi-File Restore Queue Engine ---
-        const dropzone = document.getElementById("dropzone");
-        const fileInput = document.getElementById("file-input");
-        const queueContainer = document.getElementById("queue-container");
-        const queueList = document.getElementById("queue-list");
-
-        dropzone.addEventListener("click", () => fileInput.click());
-        fileInput.addEventListener("change", handleFileSelections);
-
-        // Supporting drag-and-drop actions natively
-        dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add('border-amber-500'); });
-        dropzone.addEventListener("dragleave", () => dropzone.classList.remove('border-amber-500'));
-        dropzone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            dropzone.classList.remove('border-amber-500');
-            if (e.dataTransfer.files.length > 0) {
-                processFiles(e.dataTransfer.files);
-            }
-        });
-
-        function handleFileSelections(e) {
-            processFiles(e.target.files);
-        }
-
-        let restoreQueue = [];
-        let isRestoring = false;
-
-        function processFiles(files) {
-            const fileArray = Array.from(files).filter(file => file.name.endsWith('.zip'));
-            if (fileArray.length === 0) return;
-
-            queueContainer.classList.remove('hidden');
-
-            fileArray.forEach(file => {
-                const jobId = 'job-' + Math.random().toString(36).substr(2, 9);
-                const job = {
-                    id: jobId,
-                    file: file,
-                    status: 'pending'
-                };
-                restoreQueue.push(job);
-                addJobToUI(job);
-            });
-
-            processNextRestore();
-        }
-
-        function addJobToUI(job) {
-            const div = document.createElement('div');
-            div.id = job.id;
-            div.className = "bg-slate-900 border border-slate-800 rounded-lg p-3 flex justify-between items-center text-xs";
-            div.innerHTML = `
-                <div class="flex items-center space-x-3 truncate">
-                    <i class="fa-solid fa-file-zipper text-amber-500 text-sm"></i>
-                    <span class="font-medium text-slate-300 truncate">${job.file.name}</span>
-                </div>
-                <div class="status-badge flex items-center space-x-1.5 font-semibold text-slate-400">
-                    <i class="fa-regular fa-clock"></i> <span>Queued</span>
-                </div>
-            `;
-            queueList.appendChild(div);
-        }
-
-        async function processNextRestore() {
-            if (isRestoring) return;
-            
-            const nextJob = restoreQueue.find(job => job.status === 'pending');
-            if (!nextJob) {
-                isRestoring = false;
-                return;
-            }
-
-            isRestoring = true;
-            nextJob.status = 'restoring';
-            updateJobUIStatus(nextJob.id, 'restoring', 'Restoring...', 'text-amber-500', 'fa-solid fa-sync animate-spin');
-
-            const formData = new FormData();
-            formData.append("file", nextJob.file);
+        async function scanWorkspace() {
+            writeLog("Polling host Docker landscape...", "sys");
+            const containersTarget = document.getElementById('containers-target');
+            const stacksTarget = document.getElementById('stacks-target');
+            const badge = document.getElementById('backend-badge');
 
             try {
-                const response = await fetch(`${API_BASE}/api/restore`, {
+                // 1. Standalone containers pull
+                const responseCon = await fetch(`${BACKEND_URL}/api/containers`);
+                const containers = await responseCon.json();
+
+                // 2. Compose Stacks pull
+                const responseStk = await fetch(`${BACKEND_URL}/api/projects`);
+                const stacks = await responseStk.json();
+
+                // Set Active Connection Badge
+                badge.className = "text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Active Link';
+
+                // Render Stacks Panel
+                if (stacks.length === 0) {
+                    stacksTarget.innerHTML = `
+                        <div class="text-center py-10 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
+                            <i class="fa-solid fa-layer-group text-xl mb-2 block text-slate-600"></i>
+                            No Compose Stacks discovered on target socket.
+                        </div>
+                    `;
+                } else {
+                    stacksTarget.innerHTML = stacks.map(stack => {
+                        const warnBanner = stack.has_warnings ? `
+                            <div class="bg-amber-950/25 border border-amber-500/20 text-amber-300 text-[10px] px-3 py-2 rounded-lg flex items-center gap-2 mb-3">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                                Unstable rolling tags (:latest) detected. Migrate with care.
+                            </div>
+                        ` : '';
+
+                        const containerList = stack.containers.map(c => {
+                            const subWarnBadge = c.unsafe_tag_warning ? `
+                                <span class="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1 py-0.5 rounded font-mono font-bold">UNSAFE TAG</span>
+                            ` : '';
+                            return `
+                                <div class="flex items-center justify-between border-t border-slate-800/50 pt-2 mt-2 text-xs">
+                                    <div class="truncate">
+                                        <p class="font-semibold text-slate-300 truncate">${c.name} <span class="text-[10px] text-slate-500 font-mono">(${c.service})</span></p>
+                                        <p class="text-[10px] text-slate-500 truncate">${c.image}</p>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        ${subWarnBadge}
+                                        <span class="text-[9px] px-1.5 py-0.5 border border-slate-800 bg-slate-900 rounded font-bold capitalize text-slate-400">${c.status}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join("");
+
+                        return `
+                            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 transition-all">
+                                <div class="flex items-start justify-between mb-3">
+                                    <div>
+                                        <p class="font-bold text-sm text-slate-200 flex items-center gap-1.5">
+                                            <i class="fa-solid fa-folder-open text-brand-500"></i>
+                                            ${stack.name}
+                                        </p>
+                                        <p class="text-[10px] text-slate-500">${stack.containers.length} service(s) managed</p>
+                                    </div>
+                                    <button onclick="openBackupSettings('${stack.name}', 'project')" class="bg-brand-500 hover:bg-brand-600 text-slate-950 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1">
+                                        <i class="fa-solid fa-file-zipper"></i> Backup Stack
+                                    </button>
+                                </div>
+                                ${warnBanner}
+                                <div class="space-y-1">
+                                    ${containerList}
+                                </div>
+                            </div>
+                        `;
+                    }).join("");
+                }
+
+                // Render Individual Containers Panel
+                if (containers.length === 0) {
+                    containersTarget.innerHTML = `
+                        <div class="text-center py-10 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
+                            <i class="fa-solid fa-box text-xl mb-2 block text-slate-600"></i>
+                            No standalone containers discovered.
+                        </div>
+                    `;
+                } else {
+                    containersTarget.innerHTML = containers.map(container => {
+                        const statusColor = container.status === "running" ? "bg-emerald-400" : "bg-slate-500";
+                        const volumeCount = container.mounts ? container.mounts.length : 0;
+                        const ports = container.ports ? Object.keys(container.ports).join(", ") : "None";
+                        const tagWarning = check_for_unsafe_tags(container.image);
+                        const warnBadge = tagWarning ? `
+                            <span class="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1 py-0.5 rounded font-mono font-bold">UNSAFE TAG</span>
+                        ` : '';
+
+                        return `
+                            <div class="bg-slate-950/80 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="flex-1 space-y-1 min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-xs text-slate-200 truncate">${container.name}</span>
+                                            <span class="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-mono">${container.id}</span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-500 code-font truncate">${container.image}</p>
+                                        
+                                        <div class="flex flex-wrap gap-2 pt-2">
+                                            <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1">
+                                                <i class="fa-solid fa-hard-drive"></i> ${volumeCount} Mount(s)
+                                            </span>
+                                            <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1 truncate max-w-xs">
+                                                <i class="fa-solid fa-link"></i> ${ports || "Host Isolated"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col items-end gap-2 shrink-0">
+                                        <span class="text-[9px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded border ${container.status === 'running' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'} flex items-center gap-1">
+                                            <span class="w-1.5 h-1.5 ${statusColor} rounded-full"></span> ${container.status}
+                                        </span>
+                                        ${warnBadge}
+                                        <button onclick="openBackupSettings('${container.id}', 'container')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold px-3 py-1 rounded transition-all">
+                                            Backup Setup
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join("");
+                }
+
+                writeLog("Rescan complete. Discovered stacks and containers parsed.", "success");
+
+            } catch (err) {
+                badge.className = "text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> API Offline';
+                writeLog(`Scanning error reported: ${err.message}`, "err");
+            }
+        }
+
+        function openBackupSettings(id, type) {
+            document.getElementById('backup-card').classList.remove('hidden');
+            document.getElementById('selected-target-id').value = id;
+            document.getElementById('selected-target-type').value = type;
+
+            const targetTitle = document.getElementById('target-title-label');
+            const targetSub = document.getElementById('target-sub-label');
+            const imageWrapper = document.getElementById('image-freeze-wrapper');
+            const submitBtn = document.getElementById('btn-backup-submit');
+
+            if (type === 'project') {
+                targetTitle.innerHTML = '<i class="fa-solid fa-layer-group"></i> Export Stack';
+                targetSub.textContent = `Target Stack: ${id}`;
+                imageWrapper.classList.remove('hidden');
+                submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP';
+            } else {
+                targetTitle.innerHTML = '<i class="fa-solid fa-cube"></i> Export Container';
+                targetSub.textContent = `Target ID: ${id}`;
+                imageWrapper.classList.add('hidden'); // Standalone images cannot use freeze save currently
+                submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Container & Download ZIP';
+            }
+
+            writeLog(`Opened migration setup parameters for target "${id}" (${type}).`, 'sys');
+        }
+
+        function closeBackupSettings() {
+            document.getElementById('backup-card').classList.add('hidden');
+        }
+
+        async function executeBackupProcess() {
+            const targetId = document.getElementById('selected-target-id').value;
+            const targetType = document.getElementById('selected-target-type').value;
+            const incVols = document.getElementById('backup-opt-vols').checked;
+            const incImages = document.getElementById('backup-opt-images').checked;
+            const doPause = document.getElementById('backup-opt-pause').checked;
+            const submitBtn = document.getElementById('btn-backup-submit');
+
+            writeLog(`Packaging migration environment for "${targetId}"...`, "sys");
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Writing payloads...`;
+
+            try {
+                const formData = new FormData();
+                formData.append("include_volumes", incVols);
+                formData.append("pause_during_backup", doPause);
+
+                let endpoint = '';
+                if (targetType === 'project') {
+                    formData.append("project_name", targetId);
+                    formData.append("include_images", incImages);
+                    endpoint = `${BACKEND_URL}/api/backup-project`;
+                } else {
+                    formData.append("container_id", targetId);
+                    endpoint = `${BACKEND_URL}/api/backup`;
+                }
+
+                const response = await fetch(endpoint, {
                     method: "POST",
                     body: formData
                 });
-                const result = await response.json();
 
-                if (response.ok) {
-                    nextJob.status = 'completed';
-                    updateJobUIStatus(nextJob.id, 'completed', 'Completed', 'text-emerald-500', 'fa-solid fa-circle-check');
-                } else {
-                    nextJob.status = 'failed';
-                    updateJobUIStatus(nextJob.id, 'failed', `Failed: ${result.detail}`, 'text-rose-500', 'fa-solid fa-circle-xmark');
-                }
+                if (!response.ok) throw new Error("Internal daemon execution error during tar serialization.");
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = `dockmove_backup_${targetId}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                writeLog(`Migration payload downloaded successfully for "${targetId}".`, "success");
+                showToast("System Packaged", "Migration ZIP archived and downloaded.", "success");
+                closeBackupSettings();
+
             } catch (err) {
-                nextJob.status = 'failed';
-                updateJobUIStatus(nextJob.id, 'failed', `Error: ${err.message}`, 'text-rose-500', 'fa-solid fa-triangle-exclamation');
+                writeLog(`Serialization failed: ${err.message}`, "err");
+                showToast("Migration Failed", err.message, "err");
+            } finally {
+                submitBtn.disabled = false;
+                if (targetType === 'project') {
+                    submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP';
+                } else {
+                    submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Container & Download ZIP';
+                }
             }
-
-            loadContainers(); // Refresh list to show newly restored container
-            isRestoring = false;
-            processNextRestore(); // Trigger next file in queue
         }
 
-        function updateJobUIStatus(jobId, status, text, colorClass, iconClass) {
-            const jobDiv = document.getElementById(jobId);
-            if (!jobDiv) return;
-            const badge = jobDiv.querySelector('.status-badge');
-            badge.className = `status-badge flex items-center space-x-1.5 font-semibold ${colorClass}`;
-            badge.innerHTML = `<i class="${iconClass}"></i> <span>${text}</span>`;
+        const dropArea = document.getElementById('drop-area');
+        const fileInputRaw = document.getElementById('file-input-raw');
+
+        dropArea.onclick = () => fileInputRaw.click();
+
+        dropArea.ondragover = (e) => {
+            e.preventDefault();
+            dropArea.className = "border-2 border-dashed border-brand-500 rounded-xl p-6 text-center cursor-pointer bg-brand-500/5 transition-all group";
+        };
+
+        dropArea.ondragleave = () => {
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+        };
+
+        dropArea.ondrop = (e) => {
+            e.preventDefault();
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+            if (e.dataTransfer.files.length > 0) {
+                setRestoreFile(e.dataTransfer.files[0]);
+            }
+        };
+
+        fileInputRaw.onchange = () => {
+            if (fileInputRaw.files.length > 0) {
+                setRestoreFile(fileInputRaw.files[0]);
+            }
+        };
+
+        function setRestoreFile(file) {
+            fileToRestore = file;
+            document.getElementById('restore-file-lbl').textContent = `${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+            dropArea.classList.add('hidden');
+            document.getElementById('restore-progress-frame').classList.remove('hidden');
+            writeLog(`Dispatched backup profile "${file.name}" to migration target.`, 'sys');
         }
 
-        // --- Helpers for Modal Progress Overlays ---
-        function showOverlay(title, desc, progress) {
-            const overlay = document.getElementById('progress-overlay');
-            document.getElementById('overlay-title').innerText = title;
-            document.getElementById('overlay-desc').innerText = desc;
-            document.getElementById('overlay-progress-bar').style.width = `${progress}%`;
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
+        function clearRestoreFile() {
+            fileToRestore = null;
+            document.getElementById('restore-progress-frame').classList.add('hidden');
+            dropArea.classList.remove('hidden');
+            fileInputRaw.value = '';
+            writeLog("Restore memory space flushed.", "sys");
         }
 
-        function hideOverlay() {
-            const overlay = document.getElementById('progress-overlay');
-            overlay.classList.remove('flex');
-            overlay.classList.add('hidden');
+        async function executeRestoreProcess() {
+            if (!fileToRestore) return;
+            const btn = document.getElementById('btn-restore-submit');
+            writeLog("Reconstructing network blocks and mounting directories...", "sys");
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Aligning volumes...`;
+
+            try {
+                const formData = new FormData();
+                formData.append("file", fileToRestore);
+
+                const response = await fetch(`${BACKEND_URL}/api/restore`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Restoration target failed to initialize components.");
+
+                const result = await response.json();
+                writeLog("Restoration finished. Dynamic virtual stacks running.", "success");
+                showToast("Restored", "Containers completely restored with volumes and networks.", "success");
+                clearRestoreFile();
+                scanWorkspace();
+
+            } catch (err) {
+                writeLog(`Restoration failed: ${err.message}`, "err");
+                showToast("Restoration Error", err.message, "err");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore';
+            }
         }
 
-        window.onload = loadContainers;
+        function check_for_unsafe_tags(image_string) {
+            if (!image_string.includes(":")) return true;
+            const parts = image_string.split(":");
+            return parts[parts.length - 1].toLowerCase() === "latest";
+        }
+
+        window.onload = () => {
+            scanWorkspace();
+        };
     </script>
 </body>
 </html>
