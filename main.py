@@ -7,7 +7,6 @@ import json
 import yaml
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
-import json
 from fastapi.middleware.cors import CORSMiddleware
 import docker
 
@@ -21,6 +20,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serves the index.html landing page at the root route
+@app.get("/")
+def read_index():
+    if os.path.exists("index.html"):
+        with open("index.html", "r") as f:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=f.read(), status_code=200)
+    raise HTTPException(status_code=404, detail="index.html not found")
 
 # Connect natively to host Docker Daemon via socket
 try:
@@ -111,9 +119,6 @@ async def execute_backup(
                             volumes_from=[container_id],
                             remove=True
                         )
-                        # Tar binary sidecar copy mechanism
-                        # Write the resulting tar inside the backup package
-                        # ...
         
         # Resurrect runtime container from paused state
         if pause_during_backup and container.status == "paused":
@@ -158,3 +163,9 @@ def generate_compose_blueprint(attrs: dict) -> str:
         "services": service
     }
     return yaml.dump(compose_data, default_flow_style=False)
+
+# This block is what keeps your container running and listening for web requests
+if __name__ == "__main__":
+    import uvicorn
+    # Bind to 0.0.0.0 internally on port 8080 (which you map to 6767 via compose)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
