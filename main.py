@@ -108,13 +108,17 @@ async def execute_backup(
                         volume_name = mount['Name']
                         tar_file_path = os.path.join(temp_dir, f"volume_{volume_name}.tar")
                         
-                        # Use an Alpine sidecar container to archive volume contents safely
+                        # Fix: Added detach=True to guarantee we get a Container object, not bytes
                         sidecar = client.containers.run(
                             "alpine:latest",
                             command=f"tar -cf /backup.tar -C {mount['Destination']} .",
                             volumes={volume_name: {'bind': mount['Destination'], 'mode': 'ro'}},
+                            detach=True,
                             remove=False
                         )
+                        
+                        # Wait explicitly for the tarring sidecar run to finish processing
+                        sidecar.wait()
                         
                         # Retrieve the tar archive stream from the sidecar
                         ststream, stat = sidecar.get_archive("/backup.tar")
