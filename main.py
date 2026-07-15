@@ -6,7 +6,8 @@ import zipfile
 import json
 import yaml
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONEncoder
+from fastapi.responses import FileResponse
+import json
 from fastapi.middleware.cors import CORSMiddleware
 import docker
 
