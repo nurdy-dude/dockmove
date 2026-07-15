@@ -48,7 +48,8 @@ def check_for_unsafe_tags(image_string: str) -> bool:
 
 def heal_wp_config(file_path: str):
     """
-    Injects dynamic HTTP_HOST detection into wp-config.php to prevent port/IP 
+    Injects dynamic HTTP_HOST detection into wp-config.php right after the opening <?php tag
+    to guarantee it executes before WordPress boots (wp-settings.php). This prevents port/IP 
     redirection lockouts when migrating between servers.
     """
     try:
@@ -59,7 +60,6 @@ def heal_wp_config(file_path: str):
         if "WP_HOME" in content and "$_SERVER['HTTP_HOST']" in content:
             return
 
-        insertion_marker = "/* That's all, stop editing! Happy publishing. */"
         override_code = (
             "\n"
             "/** Added dynamically by DockMove Auto-Heal to support multi-port migration **/\n"
@@ -69,10 +69,12 @@ def heal_wp_config(file_path: str):
             "}\n"
         )
         
-        if insertion_marker in content:
-            content = content.replace(insertion_marker, f"{override_code}\n{insertion_marker}")
+        # Inject immediately after the opening <?php tag (guarantees early boot execution)
+        if "<?php" in content:
+            content = content.replace("<?php", "<?php" + override_code, 1)
         else:
-            content += override_code
+            # Fallback if no <?php tag is found
+            content = override_code + content
             
         with open(file_path, 'w') as f:
             f.write(content)
