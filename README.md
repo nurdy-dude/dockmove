@@ -1,3 +1,6 @@
+<p align="center">
+  <img width="460" src="https://github.com/nurdy-dude/dockmove/blob/main/images/dockmove.png">
+</p>
 
 # DockMove: Docker Host Migration & Backup Pipeline
 
