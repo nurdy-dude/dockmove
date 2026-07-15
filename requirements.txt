@@ -1,0 +1,7 @@
+STREAMING_CHUNK: Listing Python dependencies...
+
+fastapi>=0.100.0
+uvicorn>=0.22.0
+docker>=6.1.3
+pyyaml>=6.0.1
+python-multipart>=0.0.6
