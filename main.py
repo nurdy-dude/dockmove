@@ -67,6 +67,8 @@ def heal_wp_config(file_path: str):
             "    define('WP_HOME', 'http://' . $_SERVER['HTTP_HOST']);\n"
             "    define('WP_SITEURL', 'http://' . $_SERVER['HTTP_HOST']);\n"
             "}\n"
+            "define('FORCE_SSL_ADMIN', false);\n"
+            "define('FORCE_SSL_LOGIN', false);\n"
         )
         
         # Inject immediately after the opening <?php tag (guarantees early boot execution)
@@ -81,6 +83,37 @@ def heal_wp_config(file_path: str):
         print(f"[DockMove Auto-Heal] Successfully updated dynamic URL rules in: {file_path}")
     except Exception as e:
         print(f"[DockMove Auto-Heal] Error patching wp-config.php: {e}")
+
+
+def heal_htaccess(file_path: str):
+    """
+    Scans the .htaccess file and comments out any active RewriteRules 
+    forcing HTTPS redirection. This keeps connections plain-text HTTP.
+    """
+    try:
+        with open(file_path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+        
+        modified = False
+        new_lines = []
+        for line in lines:
+            strip_line = line.strip().lower()
+            # Comment out HTTPS-forcing rewrites
+            if "https://" in strip_line and "rewriterule" in strip_line:
+                new_lines.append("# " + line)
+                modified = True
+            elif "rewritecond" in strip_line and "%{https}" in strip_line:
+                new_lines.append("# " + line)
+                modified = True
+            else:
+                new_lines.append(line)
+                
+        if modified:
+            with open(file_path, 'w') as f:
+                f.writelines(new_lines)
+            print(f"[DockMove Auto-Heal] Commented out HTTPS-forcing rules in: {file_path}")
+    except Exception as e:
+        print(f"[DockMove Auto-Heal] Error patching .htaccess: {e}")
 
 
 def prepare_and_heal_volume(temp_dir: str, vol_filename: str):
@@ -116,6 +149,9 @@ def prepare_and_heal_volume(temp_dir: str, vol_filename: str):
                     wp_path = os.path.join(root, "wp-config.php")
                     heal_wp_config(wp_path)
                     wp_config_healed = True
+                if ".htaccess" in files:
+                    ht_path = os.path.join(root, ".htaccess")
+                    heal_htaccess(ht_path)
             
             # If we auto-healed a config file, repack the tarballs so they get restored properly
             if wp_config_healed:
@@ -208,7 +244,7 @@ def list_compose_projects():
 
 
 @app.post("/api/backup")
-async def execute_backup(
+def execute_backup(
     container_id: str = Form(...),
     include_volumes: bool = Form(True),
     pause_during_backup: bool = Form(True)
