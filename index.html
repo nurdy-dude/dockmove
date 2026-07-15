@@ -13,7 +13,12 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        ::-webkit-scrollbar-thumb:hover { background: #ffd400; }
+        
+        /* Custom modal transition animation */
+        .modal-active {
+            transition: opacity 0.25s ease-out;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -21,35 +26,43 @@
                 extend: {
                     colors: {
                         brand: {
-                            50: '#fffbeb',
-                            500: '#f59e0b',
-                            600: '#d97706',
-                            900: '#78350f',
+                            50: '#fffdf0',
+                            400: '#ffe55c',
+                            500: '#ffd400', /* Nurdy Signature Yellow */
+                            600: '#cca200',
+                            900: '#665100',
                         },
                         terminal: '#020617'
+                    },
+                    boxShadow: {
+                        'brand-glow': '0 0 15px -3px rgba(255, 212, 0, 0.4)',
+                        'brand-glow-lg': '0 0 30px -5px rgba(255, 212, 0, 0.6)'
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-full flex flex-col">
+<body class="bg-slate-950 text-slate-100 min-h-full flex flex-col selection:bg-brand-500 selection:text-slate-950">
 
-    <header class="border-b border-slate-800 bg-slate-900/40 sticky top-0 z-50 backdrop-blur-md">
+    <header class="border-b border-slate-800 bg-slate-900/40 sticky top-0 z-40 backdrop-blur-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="bg-brand-500 text-slate-950 p-2 rounded-xl shadow-lg shadow-brand-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-server text-lg"></i>
+                <div class="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-brand-glow p-1">
+                    <img src="https://raw.githubusercontent.com/nurdy-dude/dockmove/main/images/dockmove.png" 
+                         alt="Nurdy Logo" 
+                         class="h-full w-full object-contain"
+                         onerror="this.onerror=null; this.src='https://placehold.co/40x40/ffd400/020617?text=N'">
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
                         <span class="font-bold text-base tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">dockmove</span>
-                        <span class="text-[9px] bg-brand-500/10 text-brand-500 border border-brand-500/20 px-1.5 py-0.5 rounded font-semibold">ENTERPRISE V2</span>
+                        <span class="text-[9px] bg-brand-500/10 text-brand-500 border border-brand-500/20 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">NURDY EDITION</span>
                     </div>
                     <p class="text-[10px] text-slate-400">Docker Host Migration & Backup Pipeline</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
                 <span id="backend-badge" class="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium">
                     <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                     API Offline
@@ -60,7 +73,8 @@
 
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
-        <div id="status-toast" class="hidden rounded-xl p-4 flex items-start gap-3 border transition-all">
+        <!-- Universal System Toast -->
+        <div id="status-toast" class="hidden rounded-xl p-4 flex items-start gap-3 border transition-all duration-300 shadow-brand-glow">
             <div id="toast-icon-box" class="p-2 rounded-lg flex items-center justify-center text-sm"></div>
             <div class="flex-1">
                 <h4 id="toast-title" class="text-xs font-semibold">Notification</h4>
@@ -73,28 +87,23 @@
 
             <div class="lg:col-span-7 space-y-6">
                 
-                <!-- Workspace Tabs -->
-                <div class="flex border-b border-slate-800">
-                    <button id="tab-stacks" onclick="switchTab('stacks')" class="px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2">
-                        <i class="fa-solid fa-cubes"></i> Compose Stacks
-                    </button>
-                    <button id="tab-containers" onclick="switchTab('containers')" class="px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
-                        <i class="fa-solid fa-cube"></i> Single Containers
-                    </button>
-                </div>
-
-                <!-- Stacks View Panel -->
-                <div id="panel-stacks" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                <!-- Stacks Panel -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
                         <div>
                             <h3 class="font-semibold text-sm flex items-center gap-2 text-brand-500">
                                 <i class="fa-solid fa-layer-group"></i> Active Compose Stacks
                             </h3>
-                            <p class="text-[11px] text-slate-400 mt-0.5">Discovered Docker Compose projects on host daemon</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Discovered Docker Compose projects on target socket</p>
                         </div>
-                        <button onclick="scanWorkspace()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all">
-                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Rescan
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button id="btn-queue-all-backups" onclick="queueSelectedBackups()" class="hidden text-xs bg-brand-500 hover:bg-brand-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg transition-all shadow-brand-glow flex items-center gap-1.5">
+                                <i class="fa-solid fa-list-check"></i> Queue Selected (<span id="selected-backup-count">0</span>)
+                            </button>
+                            <button onclick="scanWorkspace()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all flex items-center gap-1">
+                                <i class="fa-solid fa-arrows-rotate"></i> Rescan
+                            </button>
+                        </div>
                     </div>
 
                     <div id="stacks-target" class="space-y-4">
@@ -105,21 +114,18 @@
                     </div>
                 </div>
 
-                <!-- Containers View Panel -->
-                <div id="panel-containers" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm hidden">
-                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
                         <div>
-                            <h3 class="font-semibold text-sm flex items-center gap-2 text-slate-200">
-                                <i class="fa-solid fa-cube"></i> Individual Containers
+                            <h3 class="font-semibold text-sm flex items-center gap-2 text-slate-300">
+                                <i class="fa-solid fa-cube"></i> Single Standalone Containers
                             </h3>
-                            <p class="text-[11px] text-slate-400 mt-0.5">Single standalone containers detected on physical host</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Isolated standalone hosts running outside active projects</p>
                         </div>
-                        <button onclick="scanWorkspace()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all">
-                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Rescan
-                        </button>
                     </div>
 
-                    <div id="containers-target" class="space-y-3">
+                    <!-- Scrollable encapsulated viewport -->
+                    <div id="containers-target" class="space-y-3 max-h-72 overflow-y-auto pr-1">
                         <div class="text-center py-8 text-slate-500 text-xs">
                             <i class="fa-solid fa-circle-notch animate-spin text-lg text-brand-500 mb-2 block mx-auto"></i>
                             Discovering standalone containers...
@@ -131,94 +137,79 @@
 
             <div class="lg:col-span-5 space-y-6">
 
-                <!-- Dynamic Export Overlay/Settings Card -->
-                <div id="backup-card" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hidden transition-all">
-                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                <!-- Double-Engine Queue Board -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                    <div class="mb-4 pb-3 border-b border-slate-800 flex justify-between items-center">
                         <div>
-                            <h3 id="target-title-label" class="font-semibold text-sm flex items-center gap-1.5 text-brand-500">
-                                <i class="fa-solid fa-gears"></i> Export Settings
+                            <h3 class="font-semibold text-sm flex items-center gap-2 text-slate-200">
+                                <i class="fa-solid fa-cubes-stacked text-brand-500"></i>
+                                Pipeline Processing Queue
                             </h3>
-                            <p class="text-[11px] text-slate-400 mt-0.5" id="target-sub-label">Target: None</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Automated queue executing sequential migrations</p>
                         </div>
-                        <button onclick="closeBackupSettings()" class="text-xs text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+                        <button onclick="clearQueues()" class="text-[10px] text-slate-500 hover:text-red-400 font-semibold">Flush Queues</button>
                     </div>
 
+                    <!-- Active Tasks Grid -->
                     <div class="space-y-4">
-                        <input type="hidden" id="selected-target-id">
-                        <input type="hidden" id="selected-target-type"> <!-- 'container' or 'project' -->
                         
-                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
-                            <input type="checkbox" id="backup-opt-vols" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
-                            <div>
-                                <p class="text-xs font-medium text-slate-200">Archive Bound Volumes</p>
-                                <p class="text-[10px] text-slate-400 mt-0.5">Captures full filesystem state inside named volumes</p>
+                        <!-- Backup Tasks List -->
+                        <div>
+                            <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                                <i class="fa-solid fa-file-export text-brand-500"></i> Backups Queue
+                            </p>
+                            <div id="backup-queue-list" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                <p class="text-center py-4 text-slate-600 text-[11px]">No pending exports in queue</p>
                             </div>
-                        </label>
+                        </div>
 
-                        <label id="image-freeze-wrapper" class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
-                            <input type="checkbox" id="backup-opt-images" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
-                            <div>
-                                <p class="text-xs font-medium text-slate-200">Freeze Exact Docker Images</p>
-                                <p class="text-[10px] text-slate-400 mt-0.5">Bundles local binary layers directly into backup ZIP</p>
+                        <!-- Restore Tasks List -->
+                        <div>
+                            <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                                <i class="fa-solid fa-file-import text-emerald-400"></i> Restores Queue
+                            </p>
+                            <div id="restore-queue-list" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                <p class="text-center py-4 text-slate-600 text-[11px]">No pending imports in queue</p>
                             </div>
-                        </label>
+                        </div>
 
-                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
-                            <input type="checkbox" id="backup-opt-pause" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
-                            <div>
-                                <p class="text-xs font-medium text-slate-200">Pause during backup</p>
-                                <p class="text-[10px] text-slate-400 mt-0.5">Halts execution writes to avoid database block splits</p>
-                            </div>
-                        </label>
-
-                        <button id="btn-backup-submit" onclick="executeBackupProcess()" class="w-full bg-brand-500 hover:bg-brand-600 text-slate-950 py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg shadow-brand-500/10 flex items-center justify-center gap-2 transition-all">
-                            <i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP
+                        <!-- Master Controller Action Button -->
+                        <button id="btn-process-master" onclick="runSequentialPipelines()" disabled class="w-full bg-slate-800 text-slate-500 border border-slate-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-300">
+                            <i class="fa-solid fa-play"></i> Initialize Queue Processing
                         </button>
+
                     </div>
                 </div>
 
-                <!-- Unified Restoration dropzone panel -->
                 <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="mb-4 pb-3 border-b border-slate-800">
                         <h3 class="font-semibold text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-upload text-brand-500"></i>
-                            Restore Pipeline Workspace
+                            <i class="fa-solid fa-cloud-arrow-up text-brand-500"></i>
+                            Restore Pipeline Dropzone
                         </h3>
-                        <p class="text-[11px] text-slate-400 mt-0.5">Drag any DockMove zip here to rebuild stack or container</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Drop multiple DockMove backup ZIPs here to bulk queue them</p>
                     </div>
 
-                    <div id="drop-area" class="border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group">
-                        <input type="file" id="file-input-raw" class="hidden" accept=".zip">
-                        <i class="fa-solid fa-box-open text-slate-600 group-hover:text-brand-500 text-3xl mb-3 transition-colors"></i>
-                        <p class="text-xs font-semibold text-slate-300">Drag & Drop Backup ZIP</p>
-                        <p class="text-[10px] text-slate-500 mt-1">Accepts raw single-container or complete stack ZIPs</p>
-                    </div>
-
-                    <div id="restore-progress-frame" class="hidden mt-4 bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2 truncate">
-                                <i class="fa-solid fa-compact-disc text-brand-500 animate-spin"></i>
-                                <span class="text-xs font-medium text-slate-200 truncate" id="restore-file-lbl">Loading Archive...</span>
-                            </div>
-                            <button onclick="clearRestoreFile()" class="text-xs text-slate-500 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                        <button id="btn-restore-submit" onclick="executeRestoreProcess()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-2 px-3 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore
-                        </button>
+                    <!-- Enhanced HTML multi-file dropzone workspace -->
+                    <div id="drop-area" class="border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-8 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group">
+                        <input type="file" id="file-input-raw" class="hidden" accept=".zip" multiple>
+                        <i class="fa-solid fa-boxes-packing text-slate-600 group-hover:text-brand-500 text-4xl mb-3 transition-all"></i>
+                        <p class="text-xs font-semibold text-slate-300">Drag & Drop Backup ZIPs</p>
+                        <p class="text-[10px] text-slate-500 mt-1">Accepts multiple container or stack backup ZIPs simultaneously</p>
                     </div>
                 </div>
 
-                <!-- Real-time pipeline logs console -->
+                <!-- Real-Time Console Panel -->
                 <div class="bg-terminal border border-slate-800 rounded-2xl p-4 flex flex-col h-[240px] shadow-sm">
                     <div class="flex items-center justify-between border-b border-slate-800/60 pb-2 mb-2">
                         <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            System Pipeline Feed
+                            <span class="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shadow-brand-glow"></span>
+                            System Terminal Feed
                         </span>
-                        <button onclick="clearLogs()" class="text-[9px] text-slate-500 hover:text-slate-300">Clear Logs</button>
+                        <button onclick="clearLogs()" class="text-[9px] text-slate-500 hover:text-slate-300">Clear Feed</button>
                     </div>
-                    <div id="logs-feed" class="flex-1 overflow-y-auto text-[11px] code-font text-sky-400 space-y-1 pr-1">
-                        <p class="text-slate-500">[SYS] Ready.</p>
+                    <div id="logs-feed" class="flex-1 overflow-y-auto text-[11px] code-font text-brand-400 space-y-1 pr-1">
+                        <p class="text-slate-500">[SYS] Core listening pipeline active.</p>
                     </div>
                 </div>
 
@@ -227,37 +218,72 @@
 
     </main>
 
+    <div id="backup-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-brand-glow-lg transform scale-95 transition-transform duration-300" id="modal-card">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                <div>
+                    <h3 id="target-title-label" class="font-bold text-sm flex items-center gap-1.5 text-brand-500">
+                        <i class="fa-solid fa-gears"></i> Export Parameters
+                    </h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5" id="target-sub-label">Target Stack: None</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-4">
+                <input type="hidden" id="selected-target-id">
+                <input type="hidden" id="selected-target-type"> 
+                
+                <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                    <input type="checkbox" id="backup-opt-vols" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-200">Archive Named Volumes</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Captures full physical database and storage contents</p>
+                    </div>
+                </label>
+
+                <label id="image-freeze-wrapper" class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                    <input type="checkbox" id="backup-opt-images" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-200">Freeze Exact Local Images</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Embeds raw local container layer TARs for air-gapped run</p>
+                    </div>
+                </label>
+
+                <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                    <input type="checkbox" id="backup-opt-pause" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-200">Pause Containers During Task</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Temporarily halts writes to prevent database block cracks</p>
+                    </div>
+                </label>
+
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl font-bold text-xs transition-all border border-slate-700">
+                        Cancel
+                    </button>
+                    <button id="btn-modal-add-queue" onclick="pushTargetToBackupQueue()" class="w-full bg-brand-500 hover:bg-brand-600 text-slate-950 py-2.5 rounded-xl font-bold text-xs shadow-brand-glow transition-all flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-circle-plus"></i> Add to Queue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const BACKEND_URL = window.location.origin;
-        let activeTab = 'stacks';
-        let fileToRestore = null;
-
-        function switchTab(tabId) {
-            activeTab = tabId;
-            const btnStacks = document.getElementById('tab-stacks');
-            const btnContainers = document.getElementById('tab-containers');
-            const panelStacks = document.getElementById('panel-stacks');
-            const panelContainers = document.getElementById('panel-containers');
-
-            if (tabId === 'stacks') {
-                btnStacks.className = "px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2";
-                btnContainers.className = "px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
-                panelStacks.classList.remove('hidden');
-                panelContainers.classList.add('hidden');
-            } else {
-                btnContainers.className = "px-5 py-3 text-xs font-bold border-b-2 border-brand-500 text-brand-500 flex items-center gap-2";
-                btnStacks.className = "px-5 py-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
-                panelContainers.classList.remove('hidden');
-                panelStacks.classList.add('hidden');
-            }
-        }
+        
+        // System Queues State
+        let backupsQueue = [];
+        let restoresQueue = [];
+        let isProcessing = false;
 
         function writeLog(text, category = 'info') {
             const feed = document.getElementById('logs-feed');
             const p = document.createElement('p');
             let color = 'text-slate-400';
             if (category === 'sys') color = 'text-slate-500';
-            if (category === 'success') color = 'text-emerald-400 font-semibold';
+            if (category === 'success') color = 'text-brand-500 font-semibold';
             if (category === 'warn') color = 'text-amber-400';
             if (category === 'err') color = 'text-red-400 font-semibold';
             p.className = `${color}`;
@@ -267,7 +293,7 @@
         }
 
         function clearLogs() {
-            document.getElementById('logs-feed').innerHTML = '<p class="text-slate-500">[SYS] Logs cleared.</p>';
+            document.getElementById('logs-feed').innerHTML = '<p class="text-slate-500">[SYS] Console cleared.</p>';
         }
 
         function showToast(title, msg, type = 'info') {
@@ -296,71 +322,71 @@
         }
 
         async function scanWorkspace() {
-            writeLog("Polling host Docker landscape...", "sys");
+            writeLog("Polling host daemon configurations...", "sys");
             const containersTarget = document.getElementById('containers-target');
             const stacksTarget = document.getElementById('stacks-target');
             const badge = document.getElementById('backend-badge');
 
             try {
-                // 1. Standalone containers pull
                 const responseCon = await fetch(`${BACKEND_URL}/api/containers`);
                 const containers = await responseCon.json();
 
-                // 2. Compose Stacks pull
                 const responseStk = await fetch(`${BACKEND_URL}/api/projects`);
                 const stacks = await responseStk.json();
 
-                // Set Active Connection Badge
-                badge.className = "text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium";
-                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Active Link';
+                badge.className = "text-xs bg-emerald-500/10 text-brand-500 border border-brand-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-semibold shadow-brand-glow";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-brand-500 rounded-full"></span> API Connected';
 
-                // Render Stacks Panel
+                // Stacks rendering engine
                 if (stacks.length === 0) {
                     stacksTarget.innerHTML = `
                         <div class="text-center py-10 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
                             <i class="fa-solid fa-layer-group text-xl mb-2 block text-slate-600"></i>
-                            No Compose Stacks discovered on target socket.
+                            No Active Compose Stacks discovered.
                         </div>
                     `;
                 } else {
                     stacksTarget.innerHTML = stacks.map(stack => {
                         const warnBanner = stack.has_warnings ? `
                             <div class="bg-amber-950/25 border border-amber-500/20 text-amber-300 text-[10px] px-3 py-2 rounded-lg flex items-center gap-2 mb-3">
-                                <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
-                                Unstable rolling tags (:latest) detected. Migrate with care.
+                                <i class="fa-solid fa-triangle-exclamation text-brand-500 animate-pulse"></i>
+                                Unsafe rolling image tags (:latest) parsed. Redirection risks present.
                             </div>
                         ` : '';
 
                         const containerList = stack.containers.map(c => {
                             const subWarnBadge = c.unsafe_tag_warning ? `
-                                <span class="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1 py-0.5 rounded font-mono font-bold">UNSAFE TAG</span>
+                                <span class="text-[8px] bg-amber-500/10 text-brand-500 border border-brand-500/20 px-1 py-0.5 rounded font-bold">UNSAFE TAG</span>
                             ` : '';
                             return `
-                                <div class="flex items-center justify-between border-t border-slate-800/50 pt-2 mt-2 text-xs">
+                                <div class="flex items-center justify-between border-t border-slate-800/40 pt-2 mt-2 text-xs">
                                     <div class="truncate">
-                                        <p class="font-semibold text-slate-300 truncate">${c.name} <span class="text-[10px] text-slate-500 font-mono">(${c.service})</span></p>
+                                        <p class="font-semibold text-slate-300 truncate">${c.name} <span class="text-[10px] text-slate-500">(${c.service})</span></p>
                                         <p class="text-[10px] text-slate-500 truncate">${c.image}</p>
                                     </div>
                                     <div class="flex items-center gap-2 shrink-0">
                                         ${subWarnBadge}
-                                        <span class="text-[9px] px-1.5 py-0.5 border border-slate-800 bg-slate-900 rounded font-bold capitalize text-slate-400">${c.status}</span>
+                                        <span class="text-[9px] px-1.5 py-0.5 border border-slate-800 bg-slate-950 rounded font-bold text-slate-400 capitalize">${c.status}</span>
                                     </div>
                                 </div>
                             `;
                         }).join("");
 
                         return `
-                            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 transition-all">
+                            <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 transition-all">
                                 <div class="flex items-start justify-between mb-3">
-                                    <div>
-                                        <p class="font-bold text-sm text-slate-200 flex items-center gap-1.5">
-                                            <i class="fa-solid fa-folder-open text-brand-500"></i>
-                                            ${stack.name}
-                                        </p>
-                                        <p class="text-[10px] text-slate-500">${stack.containers.length} service(s) managed</p>
+                                    <div class="flex items-center gap-3">
+                                        <input type="checkbox" name="stack-multi-select" value="${stack.name}" onchange="updateMultiSelectState()" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-850 bg-slate-900 cursor-pointer">
+                                        <div>
+                                            <p class="font-bold text-sm text-slate-200 flex items-center gap-1.5">
+                                                <i class="fa-solid fa-folder-open text-brand-500"></i>
+                                                ${stack.name}
+                                            </p>
+                                            <p class="text-[10px] text-slate-500 font-medium">${stack.containers.length} active service containers</p>
+                                        </div>
                                     </div>
-                                    <button onclick="openBackupSettings('${stack.name}', 'project')" class="bg-brand-500 hover:bg-brand-600 text-slate-950 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1">
-                                        <i class="fa-solid fa-file-zipper"></i> Backup Stack
+                                    <button onclick="openModal('${stack.name}', 'project')" class="bg-brand-500 hover:bg-brand-600 text-slate-950 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 shadow-brand-glow">
+                                        <i class="fa-solid fa-sliders"></i> Configure Stack
                                     </button>
                                 </div>
                                 ${warnBanner}
@@ -372,234 +398,390 @@
                     }).join("");
                 }
 
-                // Render Individual Containers Panel
+                // Compact Container scrollable list engine
                 if (containers.length === 0) {
                     containersTarget.innerHTML = `
-                        <div class="text-center py-10 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
-                            <i class="fa-solid fa-box text-xl mb-2 block text-slate-600"></i>
-                            No standalone containers discovered.
+                        <div class="text-center py-8 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
+                            <i class="fa-solid fa-box text-xl mb-1 block text-slate-600"></i>
+                            No Standalone Containers.
                         </div>
                     `;
                 } else {
                     containersTarget.innerHTML = containers.map(container => {
-                        const statusColor = container.status === "running" ? "bg-emerald-400" : "bg-slate-500";
+                        const statusColor = container.status === "running" ? "bg-brand-500" : "bg-slate-500";
                         const volumeCount = container.mounts ? container.mounts.length : 0;
                         const ports = container.ports ? Object.keys(container.ports).join(", ") : "None";
-                        const tagWarning = check_for_unsafe_tags(container.image);
-                        const warnBadge = tagWarning ? `
-                            <span class="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1 py-0.5 rounded font-mono font-bold">UNSAFE TAG</span>
+                        const isUnsafe = check_for_unsafe_tags(container.image);
+                        const warnBadge = isUnsafe ? `
+                            <span class="text-[8px] bg-amber-500/10 text-brand-500 border border-brand-500/20 px-1 py-0.5 rounded font-bold">UNSAFE TAG</span>
                         ` : '';
 
                         return `
-                            <div class="bg-slate-950/80 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div class="flex-1 space-y-1 min-w-0">
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-bold text-xs text-slate-200 truncate">${container.name}</span>
-                                            <span class="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-mono">${container.id}</span>
-                                        </div>
-                                        <p class="text-[10px] text-slate-500 code-font truncate">${container.image}</p>
-                                        
-                                        <div class="flex flex-wrap gap-2 pt-2">
-                                            <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1">
-                                                <i class="fa-solid fa-hard-drive"></i> ${volumeCount} Mount(s)
-                                            </span>
-                                            <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1 truncate max-w-xs">
-                                                <i class="fa-solid fa-link"></i> ${ports || "Host Isolated"}
-                                            </span>
-                                        </div>
+                            <div class="bg-slate-950/40 border border-slate-800 hover:border-slate-700/60 rounded-xl p-3 transition-all flex items-center justify-between gap-4">
+                                <div class="min-w-0 flex-1 space-y-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-xs text-slate-200 truncate">${container.name}</span>
+                                        <span class="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-mono">${container.id}</span>
                                     </div>
-                                    <div class="flex flex-col items-end gap-2 shrink-0">
-                                        <span class="text-[9px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded border ${container.status === 'running' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'} flex items-center gap-1">
-                                            <span class="w-1.5 h-1.5 ${statusColor} rounded-full"></span> ${container.status}
-                                        </span>
-                                        ${warnBadge}
-                                        <button onclick="openBackupSettings('${container.id}', 'container')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold px-3 py-1 rounded transition-all">
-                                            Backup Setup
-                                        </button>
+                                    <p class="text-[10px] text-slate-500 code-font truncate">${container.image}</p>
+                                    <div class="flex items-center gap-2 pt-1">
+                                        <span class="text-[9px] text-slate-400 flex items-center gap-1"><i class="fa-solid fa-hard-drive"></i> ${volumeCount} Vols</span>
+                                        <span class="text-[9px] text-slate-400 flex items-center gap-1 truncate max-w-xs"><i class="fa-solid fa-link"></i> ${ports}</span>
                                     </div>
+                                </div>
+                                <div class="flex flex-col items-end gap-1.5 shrink-0">
+                                    <span class="text-[8px] font-bold tracking-wider uppercase px-2 py-0.5 rounded border ${container.status === 'running' ? 'bg-brand-500/10 text-brand-500 border-brand-500/20 shadow-brand-glow' : 'bg-slate-800 text-slate-400 border-slate-700'} flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 ${statusColor} rounded-full"></span> ${container.status}
+                                    </span>
+                                    ${warnBadge}
+                                    <button onclick="openModal('${container.id}', 'container')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold px-2 py-1 rounded transition-all">
+                                        Queue Export
+                                    </button>
                                 </div>
                             </div>
                         `;
                     }).join("");
                 }
 
-                writeLog("Rescan complete. Discovered stacks and containers parsed.", "success");
+                writeLog("Docker workspace inventory updated.", "success");
 
             } catch (err) {
-                badge.className = "text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium";
-                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> API Offline';
-                writeLog(`Scanning error reported: ${err.message}`, "err");
+                badge.className = "text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-semibold";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> Service Offline';
+                writeLog(`Connection to Docker API interrupted: ${err.message}`, "err");
             }
         }
 
-        function openBackupSettings(id, type) {
-            document.getElementById('backup-card').classList.remove('hidden');
+        function openModal(id, type) {
+            const modal = document.getElementById('backup-modal');
+            const card = document.getElementById('modal-card');
+            
             document.getElementById('selected-target-id').value = id;
             document.getElementById('selected-target-type').value = type;
 
-            const targetTitle = document.getElementById('target-title-label');
-            const targetSub = document.getElementById('target-sub-label');
+            const labelTitle = document.getElementById('target-title-label');
+            const labelSub = document.getElementById('target-sub-label');
             const imageWrapper = document.getElementById('image-freeze-wrapper');
-            const submitBtn = document.getElementById('btn-backup-submit');
 
             if (type === 'project') {
-                targetTitle.innerHTML = '<i class="fa-solid fa-layer-group"></i> Export Stack';
-                targetSub.textContent = `Target Stack: ${id}`;
+                labelTitle.innerHTML = '<i class="fa-solid fa-layer-group"></i> Stack Configuration';
+                labelSub.textContent = `Target: ${id}`;
                 imageWrapper.classList.remove('hidden');
-                submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP';
             } else {
-                targetTitle.innerHTML = '<i class="fa-solid fa-cube"></i> Export Container';
-                targetSub.textContent = `Target ID: ${id}`;
-                imageWrapper.classList.add('hidden'); // Standalone images cannot use freeze save currently
-                submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Container & Download ZIP';
+                labelTitle.innerHTML = '<i class="fa-solid fa-cube"></i> Container Configuration';
+                labelSub.textContent = `Target Container ID: ${id}`;
+                imageWrapper.classList.add('hidden');
             }
 
-            writeLog(`Opened migration setup parameters for target "${id}" (${type}).`, 'sys');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.add('opacity-100');
+                card.classList.remove('scale-95');
+                card.classList.add('scale-100');
+            }, 10);
         }
 
-        function closeBackupSettings() {
-            document.getElementById('backup-card').classList.add('hidden');
+        function closeModal() {
+            const modal = document.getElementById('backup-modal');
+            const card = document.getElementById('modal-card');
+
+            modal.classList.remove('opacity-100');
+            card.classList.remove('scale-100');
+            card.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 250);
         }
 
-        async function executeBackupProcess() {
-            const targetId = document.getElementById('selected-target-id').value;
-            const targetType = document.getElementById('selected-target-type').value;
-            const incVols = document.getElementById('backup-opt-vols').checked;
-            const incImages = document.getElementById('backup-opt-images').checked;
-            const doPause = document.getElementById('backup-opt-pause').checked;
-            const submitBtn = document.getElementById('btn-backup-submit');
+        function updateMultiSelectState() {
+            const selected = document.querySelectorAll('input[name="stack-multi-select"]:checked');
+            const btn = document.getElementById('btn-queue-all-backups');
+            const countSpan = document.getElementById('selected-backup-count');
 
-            writeLog(`Packaging migration environment for "${targetId}"...`, "sys");
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Writing payloads...`;
+            if (selected.length > 0) {
+                btn.classList.remove('hidden');
+                countSpan.textContent = selected.length;
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
 
-            try {
-                const formData = new FormData();
-                formData.append("include_volumes", incVols);
-                formData.append("pause_during_backup", doPause);
-
-                let endpoint = '';
-                if (targetType === 'project') {
-                    formData.append("project_name", targetId);
-                    formData.append("include_images", incImages);
-                    endpoint = `${BACKEND_URL}/api/backup-project`;
-                } else {
-                    formData.append("container_id", targetId);
-                    endpoint = `${BACKEND_URL}/api/backup`;
-                }
-
-                const response = await fetch(endpoint, {
-                    method: "POST",
-                    body: formData
+        function queueSelectedBackups() {
+            const selected = document.querySelectorAll('input[name="stack-multi-select"]:checked');
+            selected.forEach(chk => {
+                const stackName = chk.value;
+                // Add standard backups params default settings to items
+                backupsQueue.push({
+                    id: stackName,
+                    type: 'project',
+                    options: {
+                        volumes: true,
+                        images: true,
+                        pause: true
+                    },
+                    status: 'pending'
                 });
+                writeLog(`Added Stack "${stackName}" to backing sequential queue.`, 'sys');
+                chk.checked = false;
+            });
 
-                if (!response.ok) throw new Error("Internal daemon execution error during tar serialization.");
+            updateMultiSelectState();
+            renderQueuesUI();
+        }
 
-                const blob = await response.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = downloadUrl;
-                a.download = `dockmove_backup_${targetId}.zip`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(downloadUrl);
+        function pushTargetToBackupQueue() {
+            const id = document.getElementById('selected-target-id').value;
+            const type = document.getElementById('selected-target-type').value;
+            const vols = document.getElementById('backup-opt-vols').checked;
+            const imgs = document.getElementById('backup-opt-images').checked;
+            const pause = document.getElementById('backup-opt-pause').checked;
 
-                writeLog(`Migration payload downloaded successfully for "${targetId}".`, "success");
-                showToast("System Packaged", "Migration ZIP archived and downloaded.", "success");
-                closeBackupSettings();
+            backupsQueue.push({
+                id,
+                type,
+                options: {
+                    volumes: vols,
+                    images: imgs,
+                    pause
+                },
+                status: 'pending'
+            });
 
-            } catch (err) {
-                writeLog(`Serialization failed: ${err.message}`, "err");
-                showToast("Migration Failed", err.message, "err");
-            } finally {
-                submitBtn.disabled = false;
-                if (targetType === 'project') {
-                    submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Stack & Download ZIP';
-                } else {
-                    submitBtn.innerHTML = '<i class="fa-solid fa-file-zipper"></i> Pack Container & Download ZIP';
-                }
-            }
+            writeLog(`Scheduled queue item: "${id}" (${type}).`, 'sys');
+            renderQueuesUI();
+            closeModal();
         }
 
         const dropArea = document.getElementById('drop-area');
-        const fileInputRaw = document.getElementById('file-input-raw');
+        const fileInput = document.getElementById('file-input-raw');
 
-        dropArea.onclick = () => fileInputRaw.click();
+        dropArea.onclick = () => fileInput.click();
 
         dropArea.ondragover = (e) => {
             e.preventDefault();
-            dropArea.className = "border-2 border-dashed border-brand-500 rounded-xl p-6 text-center cursor-pointer bg-brand-500/5 transition-all group";
+            dropArea.className = "border-2 border-dashed border-brand-500 rounded-xl p-8 text-center cursor-pointer bg-brand-500/5 transition-all group shadow-brand-glow";
         };
 
         dropArea.ondragleave = () => {
-            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-8 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
         };
 
         dropArea.ondrop = (e) => {
             e.preventDefault();
-            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-8 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
             if (e.dataTransfer.files.length > 0) {
-                setRestoreFile(e.dataTransfer.files[0]);
+                queueRestoreFiles(e.dataTransfer.files);
             }
         };
 
-        fileInputRaw.onchange = () => {
-            if (fileInputRaw.files.length > 0) {
-                setRestoreFile(fileInputRaw.files[0]);
+        fileInput.onchange = () => {
+            if (fileInput.files.length > 0) {
+                queueRestoreFiles(fileInput.files);
             }
         };
 
-        function setRestoreFile(file) {
-            fileToRestore = file;
-            document.getElementById('restore-file-lbl').textContent = `${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
-            dropArea.classList.add('hidden');
-            document.getElementById('restore-progress-frame').classList.remove('hidden');
-            writeLog(`Dispatched backup profile "${file.name}" to migration target.`, 'sys');
+        function queueRestoreFiles(files) {
+            for (let file of files) {
+                if (file.name.endsWith('.zip')) {
+                    restoresQueue.push({
+                        file: file,
+                        status: 'pending'
+                    });
+                    writeLog(`Queued import extraction package: "${file.name}"`, 'sys');
+                } else {
+                    writeLog(`Skipped non-zip file: "${file.name}"`, 'warn');
+                }
+            }
+            renderQueuesUI();
+            fileInput.value = '';
         }
 
-        function clearRestoreFile() {
-            fileToRestore = null;
-            document.getElementById('restore-progress-frame').classList.add('hidden');
-            dropArea.classList.remove('hidden');
-            fileInputRaw.value = '';
-            writeLog("Restore memory space flushed.", "sys");
-        }
+        function renderQueuesUI() {
+            const backupsTarget = document.getElementById('backup-queue-list');
+            const restoresTarget = document.getElementById('restore-queue-list');
+            const masterBtn = document.getElementById('btn-process-master');
 
-        async function executeRestoreProcess() {
-            if (!fileToRestore) return;
-            const btn = document.getElementById('btn-restore-submit');
-            writeLog("Reconstructing network blocks and mounting directories...", "sys");
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Aligning volumes...`;
+            // Render exports list UI
+            if (backupsQueue.length === 0) {
+                backupsTarget.innerHTML = `<p class="text-center py-3 text-slate-600 text-[10px]">No pending exports in queue</p>`;
+            } else {
+                backupsTarget.innerHTML = backupsQueue.map((task, idx) => {
+                    let statusLabel = `<span class="text-[9px] text-slate-500 font-bold">Pending</span>`;
+                    if (task.status === 'processing') statusLabel = `<span class="text-[9px] text-brand-500 font-bold animate-pulse"><i class="fa-solid fa-spinner animate-spin"></i> Executing</span>`;
+                    if (task.status === 'completed') statusLabel = `<span class="text-[9px] text-emerald-400 font-bold"><i class="fa-solid fa-circle-check"></i> Ready</span>`;
+                    if (task.status === 'failed') statusLabel = `<span class="text-[9px] text-red-400 font-bold"><i class="fa-solid fa-circle-xmark"></i> Failed</span>`;
 
-            try {
-                const formData = new FormData();
-                formData.append("file", fileToRestore);
+                    return `
+                        <div class="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg flex items-center justify-between text-xs">
+                            <div class="truncate mr-3">
+                                <p class="font-semibold text-slate-300 truncate">${task.id}</p>
+                                <p class="text-[9px] text-slate-500 uppercase font-bold">${task.type}</p>
+                            </div>
+                            <div class="flex items-center gap-3 shrink-0">
+                                ${statusLabel}
+                                ${task.status === 'pending' ? `<button onclick="removeBackupTask(${idx})" class="text-slate-500 hover:text-red-400"><i class="fa-solid fa-circle-minus"></i></button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
 
-                const response = await fetch(`${BACKEND_URL}/api/restore`, {
-                    method: "POST",
-                    body: formData
-                });
+            // Render imports list UI
+            if (restoresQueue.length === 0) {
+                restoresTarget.innerHTML = `<p class="text-center py-3 text-slate-600 text-[10px]">No pending imports in queue</p>`;
+            } else {
+                restoresTarget.innerHTML = restoresQueue.map((task, idx) => {
+                    let statusLabel = `<span class="text-[9px] text-slate-500 font-bold">Pending</span>`;
+                    if (task.status === 'processing') statusLabel = `<span class="text-[9px] text-brand-500 font-bold animate-pulse"><i class="fa-solid fa-gears animate-spin"></i> Injecting</span>`;
+                    if (task.status === 'completed') statusLabel = `<span class="text-[9px] text-emerald-400 font-bold"><i class="fa-solid fa-circle-check"></i> Reconstructed</span>`;
+                    if (task.status === 'failed') statusLabel = `<span class="text-[9px] text-red-400 font-bold"><i class="fa-solid fa-circle-xmark"></i> Failed</span>`;
 
-                if (!response.ok) throw new Error("Restoration target failed to initialize components.");
+                    return `
+                        <div class="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg flex items-center justify-between text-xs">
+                            <div class="truncate mr-3">
+                                <p class="font-semibold text-slate-300 truncate">${task.file.name}</p>
+                                <p class="text-[9px] text-slate-500">${(task.file.size / 1024 / 1024).toFixed(1)} MB</p>
+                            </div>
+                            <div class="flex items-center gap-3 shrink-0">
+                                ${statusLabel}
+                                ${task.status === 'pending' ? `<button onclick="removeRestoreTask(${idx})" class="text-slate-500 hover:text-red-400"><i class="fa-solid fa-circle-minus"></i></button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
 
-                const result = await response.json();
-                writeLog("Restoration finished. Dynamic virtual stacks running.", "success");
-                showToast("Restored", "Containers completely restored with volumes and networks.", "success");
-                clearRestoreFile();
-                scanWorkspace();
-
-            } catch (err) {
-                writeLog(`Restoration failed: ${err.message}`, "err");
-                showToast("Restoration Error", err.message, "err");
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore';
+            // Lock or unlock master trigger button
+            const totalPending = backupsQueue.filter(t => t.status === 'pending').length + restoresQueue.filter(t => t.status === 'pending').length;
+            if (totalPending > 0 && !isProcessing) {
+                masterBtn.disabled = false;
+                masterBtn.className = "w-full bg-brand-500 hover:bg-brand-600 text-slate-950 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-300 shadow-brand-glow cursor-pointer";
+            } else {
+                masterBtn.disabled = true;
+                if (isProcessing) {
+                    masterBtn.innerHTML = `<i class="fa-solid fa-hourglass-half animate-spin"></i> Processing Pipelines Executing...`;
+                    masterBtn.className = "w-full bg-slate-900 text-slate-500 border border-slate-800 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-300 cursor-not-allowed";
+                } else {
+                    masterBtn.innerHTML = `<i class="fa-solid fa-play"></i> Initialize Queue Processing`;
+                    masterBtn.className = "w-full bg-slate-800 text-slate-500 border border-slate-700 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-300 cursor-not-allowed";
+                }
             }
         }
 
+        function removeBackupTask(idx) {
+            backupsQueue.splice(idx, 1);
+            renderQueuesUI();
+        }
+
+        function removeRestoreTask(idx) {
+            restoresQueue.splice(idx, 1);
+            renderQueuesUI();
+        }
+
+        function clearQueues() {
+            if (isProcessing) return;
+            backupsQueue = [];
+            restoresQueue = [];
+            writeLog("Pipeline queues cleared and components reset.", "sys");
+            renderQueuesUI();
+        }
+
+        async function runSequentialPipelines() {
+            if (isProcessing) return;
+            isProcessing = true;
+            renderQueuesUI();
+
+            writeLog("Running sequential pipelines execution loop.", "sys");
+
+            // 1. Process Export Backups Sequence
+            for (let i = 0; i < backupsQueue.length; i++) {
+                const task = backupsQueue[i];
+                if (task.status !== 'pending') continue;
+
+                task.status = 'processing';
+                renderQueuesUI();
+                writeLog(`Packing and building backup layers for: "${task.id}"...`, "sys");
+
+                try {
+                    const formData = new FormData();
+                    formData.append("include_volumes", task.options.volumes);
+                    formData.append("pause_during_backup", task.options.pause);
+
+                    let endpoint = '';
+                    if (task.type === 'project') {
+                        formData.append("project_name", task.id);
+                        formData.append("include_images", task.options.images);
+                        endpoint = `${BACKEND_URL}/api/backup-project`;
+                    } else {
+                        formData.append("container_id", task.id);
+                        endpoint = `${BACKEND_URL}/api/backup`;
+                    }
+
+                    const response = await fetch(endpoint, {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    if (!response.ok) throw new Error("Internal daemon execution block failed during backup extraction.");
+
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = downloadUrl;
+                    a.download = `dockmove_${task.id}_backup.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(downloadUrl);
+
+                    task.status = 'completed';
+                    writeLog(`Backup completed and file stream delivered for: "${task.id}"`, "success");
+
+                } catch (err) {
+                    task.status = 'failed';
+                    writeLog(`Export error encountered on "${task.id}": ${err.message}`, "err");
+                }
+                renderQueuesUI();
+            }
+
+            // 2. Process Import Restores Sequence
+            for (let i = 0; i < restoresQueue.length; i++) {
+                const task = restoresQueue[i];
+                if (task.status !== 'pending') continue;
+
+                task.status = 'processing';
+                renderQueuesUI();
+                writeLog(`Injecting volumes and assembling networks for file: "${task.file.name}"...`, "sys");
+
+                try {
+                    const formData = new FormData();
+                    formData.append("file", task.file);
+
+                    const response = await fetch(`${BACKEND_URL}/api/restore`, {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    if (!response.ok) throw new Error("Restoration runtime reported pipeline failure on container assembly.");
+
+                    const result = await response.json();
+                    task.status = 'completed';
+                    writeLog(`Environment dynamically recovered from: "${task.file.name}"`, "success");
+
+                } catch (err) {
+                    task.status = 'failed';
+                    writeLog(`Extraction pipeline failed on "${task.file.name}": ${err.message}`, "err");
+                }
+                renderQueuesUI();
+            }
+
+            isProcessing = false;
+            showToast("Pipelines Complete", "All scheduled migration tasks processed.", "success");
+            renderQueuesUI();
+            scanWorkspace();
+        }
+
+        // Helper functions
         function check_for_unsafe_tags(image_string) {
             if (!image_string.includes(":")) return true;
             const parts = image_string.split(":");
