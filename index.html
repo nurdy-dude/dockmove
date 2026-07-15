@@ -1,6 +1,465 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
-    <title>dockmove Management Interface</title>
-    <script src="https://cdn.tailwindcss.com">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DockMove Management Platform</title>
+    <!-- CSS and Icon Imports -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .code-font { font-family: 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        terminal: '#020617'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-full flex flex-col">
+
+    <header class="border-b border-slate-800 bg-slate-900/40 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-500 text-slate-950 p-2 rounded-xl shadow-lg shadow-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-box-archive text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-base tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">dockmove</span>
+                        <span class="text-[9px] bg-brand-500/10 text-brand-500 border border-brand-500/20 px-1.5 py-0.5 rounded font-semibold">PRODUCTION UI</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Docker Host Migration & Backup Pipeline</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="backend-badge" class="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                    API Offline
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+        <div id="status-toast" class="hidden rounded-xl p-4 flex items-start gap-3 border transition-all">
+            <div id="toast-icon-box" class="p-2 rounded-lg flex items-center justify-center text-sm"></div>
+            <div class="flex-1">
+                <h4 id="toast-title" class="text-xs font-semibold">Notification</h4>
+                <p id="toast-message" class="text-[11px] mt-0.5 text-slate-300"></p>
+            </div>
+            <button onclick="hideToast()" class="text-slate-400 hover:text-slate-200 text-xs mt-0.5"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Main Workspace split -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <div class="lg:col-span-7 space-y-6">
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                        <div>
+                            <h3 class="font-semibold text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-server text-brand-500"></i>
+                                Discovered Containers
+                            </h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Containers detected via mounted Docker Unix Socket</p>
+                        </div>
+                        <button onclick="scanContainers()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-all">
+                            <i class="fa-solid fa-arrows-rotate mr-1"></i> Rescan Socket
+                        </button>
+                    </div>
+
+                    <!-- Containers Dynamic Container Mount -->
+                    <div id="containers-target" class="space-y-3">
+                        <div class="text-center py-8 text-slate-500 text-xs">
+                            <i class="fa-solid fa-circle-notch animate-spin text-lg text-brand-500 mb-2 block mx-auto"></i>
+                            Waiting for local Docker API response...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- Backup Settings Drawer -->
+                <div id="backup-card" class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hidden transition-all">
+                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
+                        <div>
+                            <h3 class="font-semibold text-sm flex items-center gap-1.5 text-brand-500">
+                                <i class="fa-solid fa-gears"></i> Export Settings
+                            </h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5" id="target-container-label">Target: None</p>
+                        </div>
+                        <button onclick="closeBackupSettings()" class="text-xs text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+
+                    <!-- Configuration Toggles -->
+                    <div class="space-y-4">
+                        <input type="hidden" id="selected-container-id">
+                        
+                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                            <input type="checkbox" id="backup-opt-vols" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                            <div>
+                                <p class="text-xs font-medium text-slate-200">Archive Bound Volumes</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">Launches sidecar container to tar data states</p>
+                            </div>
+                        </label>
+
+                        <label class="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+                            <input type="checkbox" id="backup-opt-pause" checked class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                            <div>
+                                <p class="text-xs font-medium text-slate-200">Pause during backup</p>
+                                <p class="text-[10px] text-slate-400 mt-0.5">Prevents engine write operations during tar creation</p>
+                            </div>
+                        </label>
+
+                        <button id="btn-backup-submit" onclick="executeBackupProcess()" class="w-full bg-brand-500 hover:bg-brand-600 text-slate-950 py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg shadow-brand-500/10 flex items-center justify-center gap-2 transition-all">
+                            <i class="fa-solid fa-file-zipper"></i> Generate & Stream ZIP
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Restore Sandbox Card -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-5">
+                    <div class="mb-4 pb-3 border-b border-slate-800">
+                        <h3 class="font-semibold text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-upload text-brand-500"></i>
+                            Restore Pipeline Workspace
+                        </h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Import custom `.zip` backups directly to rebuild states</p>
+                    </div>
+
+                    <!-- Drag and Drop Core -->
+                    <div id="drop-area" class="border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group">
+                        <input type="file" id="file-input-raw" class="hidden" accept=".zip">
+                        <i class="fa-solid fa-box-open text-slate-600 group-hover:text-brand-500 text-3xl mb-3 transition-colors"></i>
+                        <p class="text-xs font-semibold text-slate-300">Drag & Drop DockMove ZIP</p>
+                        <p class="text-[10px] text-slate-500 mt-1">Or browse from your native platform disk</p>
+                    </div>
+
+                    <!-- Restoration Action Frame -->
+                    <div id="restore-progress-frame" class="hidden mt-4 bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 truncate">
+                                <i class="fa-solid fa-compact-disc text-brand-500 animate-spin"></i>
+                                <span class="text-xs font-medium text-slate-200 truncate" id="restore-file-lbl">Loading Archive...</span>
+                            </div>
+                            <button onclick="clearRestoreFile()" class="text-xs text-slate-500 hover:text-red-400"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                        <button id="btn-restore-submit" onclick="executeRestoreProcess()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-2 px-3 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore Containers
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-terminal border border-slate-800 rounded-2xl p-4 flex flex-col h-[220px]">
+                    <div class="flex items-center justify-between border-b border-slate-800/60 pb-2 mb-2">
+                        <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            System Pipeline Feed
+                        </span>
+                        <button onclick="clearLogs()" class="text-[9px] text-slate-500 hover:text-slate-300">Clear Logs</button>
+                    </div>
+                    <div id="logs-feed" class="flex-1 overflow-y-auto text-[11px] code-font text-sky-400 space-y-1 pr-1">
+                        <p class="text-slate-500">[SYS] Ready.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const BACKEND_URL = window.location.origin; // Same-host communications
+
+        // Log Dispatcher
+        function writeLog(text, category = 'info') {
+            const feed = document.getElementById('logs-feed');
+            const p = document.createElement('p');
+            
+            let color = 'text-slate-400';
+            if (category === 'sys') color = 'text-slate-500';
+            if (category === 'success') color = 'text-emerald-400 font-semibold';
+            if (category === 'warn') color = 'text-amber-400';
+            if (category === 'err') color = 'text-red-400 font-semibold';
+            
+            p.className = `${color}`;
+            p.innerHTML = `[${new Date().toLocaleTimeString()}] ${text}`;
+            feed.appendChild(p);
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs-feed').innerHTML = '<p class="text-slate-500">[SYS] Logs cleared.</p>';
+        }
+
+        // Notification Alerts
+        function showToast(title, msg, type = 'info') {
+            const toast = document.getElementById('status-toast');
+            const iconBox = document.getElementById('toast-icon-box');
+            
+            toast.className = "rounded-xl p-4 flex items-start gap-3 border transition-all block";
+            
+            if (type === 'err') {
+                toast.classList.add("bg-red-950/30", "border-red-500/20", "text-red-200");
+                iconBox.className = "p-2 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
+            } else if (type === 'success') {
+                toast.classList.add("bg-emerald-950/30", "border-emerald-500/20", "text-emerald-200");
+                iconBox.className = "p-2 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            } else {
+                toast.classList.add("bg-slate-900/60", "border-slate-800", "text-slate-200");
+                iconBox.className = "p-2 rounded-lg bg-brand-500/10 text-brand-500 flex items-center justify-center text-sm";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+            }
+            
+            document.getElementById('toast-title').textContent = title;
+            document.getElementById('toast-message').textContent = msg;
+        }
+
+        function hideToast() {
+            document.getElementById('status-toast').classList.add('hidden');
+        }
+
+        async function scanContainers() {
+            writeLog("Polling container landscape from Docker API...", "sys");
+            const target = document.getElementById('containers-target');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/containers`);
+                if (!response.ok) throw new Error("API responded with an error.");
+                
+                const containers = await response.json();
+                
+                // Update active online badge
+                const badge = document.getElementById('backend-badge');
+                badge.className = "text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium";
+                badge.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Active Link';
+
+                if (containers.length === 0) {
+                    target.innerHTML = `
+                        <div class="text-center py-10 border border-dashed border-slate-800 rounded-xl text-slate-500 text-xs">
+                            <i class="fa-solid fa-cubes text-xl mb-2 block text-slate-600"></i>
+                            No containers found on target Docker host socket.
+                        </div>
+                    `;
+                    writeLog("Scanned successfully. Zero containers discovered.", "warn");
+                    return;
+                }
+
+                target.innerHTML = containers.map(container => {
+                    const statusColor = container.status === "running" ? "bg-emerald-400" : "bg-slate-500";
+                    const ports = container.ports ? Object.keys(container.ports).join(", ") : "None";
+                    const volumeCount = container.mounts ? container.mounts.length : 0;
+                    
+                    return `
+                        <div class="bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex-1 space-y-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-xs text-slate-200 truncate">${container.name}</span>
+                                        <span class="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-mono">${container.id}</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-500 code-font truncate">${container.image}</p>
+                                    
+                                    <div class="flex flex-wrap gap-2 pt-2">
+                                        <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1">
+                                            <i class="fa-solid fa-hard-drive"></i> ${volumeCount} Mount(s)
+                                        </span>
+                                        <span class="text-[9px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 flex items-center gap-1 truncate max-w-xs">
+                                            <i class="fa-solid fa-link"></i> ${ports || "Host Isolated"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end gap-2 shrink-0">
+                                    <span class="text-[9px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded border ${container.status === 'running' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'} flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 ${statusColor} rounded-full"></span> ${container.status}
+                                    </span>
+                                    <button onclick="openBackupSettings('${container.id}', '${container.name}')" class="bg-brand-500/10 hover:bg-brand-500 hover:text-slate-950 text-brand-400 border border-brand-500/20 text-[10px] font-bold px-3 py-1 rounded transition-all">
+                                        Setup Backup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+
+                writeLog(`Successfully parsed configuration data for ${containers.length} targets.`, "success");
+
+            } catch (err) {
+                target.innerHTML = `
+                    <div class="text-center py-10 border border-dashed border-red-900/30 bg-red-950/5 rounded-xl text-red-400 text-xs p-4">
+                        <i class="fa-solid fa-triangle-exclamation text-xl text-red-500 mb-2 block mx-auto"></i>
+                        Unable to bridge connections with the Backend. Make sure the container API environment is running locally.
+                    </div>
+                `;
+                writeLog(`Connection to endpoint API failed: ${err.message}`, "err");
+            }
+        }
+
+        function openBackupSettings(id, name) {
+            document.getElementById('backup-card').classList.remove('hidden');
+            document.getElementById('selected-container-id').value = id;
+            document.getElementById('target-container-label').textContent = `Target: ${name}`;
+            writeLog(`Opened configuration for backup profile targeting "${name}".`, 'sys');
+        }
+
+        function closeBackupSettings() {
+            document.getElementById('backup-card').classList.add('hidden');
+        }
+
+        async function executeBackupProcess() {
+            const containerId = document.getElementById('selected-container-id').value;
+            const incVols = document.getElementById('backup-opt-vols').checked;
+            const doPause = document.getElementById('backup-opt-pause').checked;
+            const submitBtn = document.getElementById('btn-backup-submit');
+
+            writeLog(`Packaging configuration bundle for target ${containerId}...`, "sys");
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Zipping data...`;
+
+            try {
+                const formData = new FormData();
+                formData.append("container_id", containerId);
+                formData.append("include_volumes", incVols);
+                formData.append("pause_during_backup", doPause);
+
+                const response = await fetch(`${BACKEND_URL}/api/backup`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Internal compilation error on backend extraction.");
+
+                // Capture blob directly to initiate file stream download
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = `dockmove_backup_${containerId}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                writeLog("Complete system bundle created. ZIP download initiated successfully.", "success");
+                showToast("Backup Success", "Compressed container archive downloaded to local filesystem.", "success");
+                closeBackupSettings();
+
+            } catch (err) {
+                writeLog(`Zip production pipeline crashed: ${err.message}`, "err");
+                showToast("Extraction Failed", err.message, "err");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fa-solid fa-file-zipper"></i> Generate & Stream ZIP`;
+            }
+        }
+
+        const dropArea = document.getElementById('drop-area');
+        const fileInputRaw = document.getElementById('file-input-raw');
+        let fileToRestore = null;
+
+        dropArea.onclick = () => fileInputRaw.click();
+
+        dropArea.ondragover = (e) => {
+            e.preventDefault();
+            dropArea.className = "border-2 border-dashed border-brand-500 rounded-xl p-6 text-center cursor-pointer bg-brand-500/5 transition-all group";
+        };
+
+        dropArea.ondragleave = () => {
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+        };
+
+        dropArea.ondrop = (e) => {
+            e.preventDefault();
+            dropArea.className = "border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-950/40 hover:bg-slate-950/80 group";
+            if (e.dataTransfer.files.length > 0) {
+                setRestoreFile(e.dataTransfer.files[0]);
+            }
+        };
+
+        fileInputRaw.onchange = () => {
+            if (fileInputRaw.files.length > 0) {
+                setRestoreFile(fileInputRaw.files[0]);
+            }
+        };
+
+        function setRestoreFile(file) {
+            fileToRestore = file;
+            document.getElementById('restore-file-lbl').textContent = `${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+            dropArea.classList.add('hidden');
+            document.getElementById('restore-progress-frame').classList.remove('hidden');
+            writeLog(`Loaded package profile "${file.name}" for recovery target staging.`, 'sys');
+        }
+
+        function clearRestoreFile() {
+            fileToRestore = null;
+            document.getElementById('restore-progress-frame').classList.add('hidden');
+            dropArea.classList.remove('hidden');
+            fileInputRaw.value = '';
+            writeLog("Restore staging memory flushed.", "sys");
+        }
+
+        async function executeRestoreProcess() {
+            if (!fileToRestore) return;
+            const btn = document.getElementById('btn-restore-submit');
+            writeLog("Triggering restoration sequence on target socket host...", "sys");
+            
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Injecting structures...`;
+
+            try {
+                const formData = new FormData();
+                formData.append("file", fileToRestore);
+
+                const response = await fetch(`${BACKEND_URL}/api/restore`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Rebuild process failed. Verify zip parameters.");
+
+                const result = await response.json();
+                writeLog("Infrastructure replication finished. Containers restored and running.", "success");
+                showToast("System Restored", "Docker assets extracted and deployed on local host.", "success");
+                
+                clearRestoreFile();
+                scanContainers();
+
+            } catch (err) {
+                writeLog(`Restoration failed: ${err.message}`, "err");
+                showToast("Restoration Error", err.message, "err");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Extract & Restore Containers`;
+            }
+        }
+
+        // Auto-run scanner loop on startup
+        window.onload = () => {
+            scanContainers();
+        };
+    </script>
+</body>
+</html>
