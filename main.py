@@ -27,7 +27,6 @@ except Exception as e:
     print(f"Error connecting to Docker Host Daemon: {e}")
     client = None
 
-
 def check_for_unsafe_tags(image_string: str) -> bool:
     """
     Returns True if the image uses ':latest' or has no explicit tag version,
@@ -368,7 +367,7 @@ async def backup_compose_project(
 
 @app.post("/api/restore")
 async def execute_restore(file: UploadFile = File(...)):
-    """Restores a single container's configurations, volumes, and network attributes."""
+    """Unified route that automatically delegates single-container or multi-service stack restores."""
     if not client:
         raise HTTPException(status_code=500, detail="Docker Daemon Connection Offline")
 
@@ -379,45 +378,154 @@ async def execute_restore(file: UploadFile = File(...)):
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract package
+        # Extract package to temporary folder
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
 
-        metadata_path = os.path.join(temp_dir, "metadata.json")
-        if not os.path.exists(metadata_path):
-            raise HTTPException(status_code=400, detail="Invalid package: metadata.json missing")
+        # Inspect Zip format for dispatch targeting
+        stack_meta_path = os.path.join(temp_dir, "stack_metadata.json")
+        single_meta_path = os.path.join(temp_dir, "metadata.json")
 
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
+        if os.path.exists(stack_meta_path):
+            return await run_restore_project(temp_dir)
+        elif os.path.exists(single_meta_path):
+            return await run_restore_single(temp_dir)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid package layout: Metadata tags missing.")
 
-        name = metadata['Name'].replace("/", "")
-        image = metadata['Config']['Image']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore pipeline failed: {str(e)}")
 
-        # 1. Pre-pull required Docker image
-        client.images.pull(image)
 
-        # 2. Auto-create network infrastructure
-        networks_config = metadata.get('NetworkSettings', {}).get('Networks', {})
-        restored_networks = []
-        for net_name, net_data in networks_config.items():
-            try:
-                network = client.networks.get(net_name)
-            except docker.errors.NotFound:
-                network = client.networks.create(net_name, driver="bridge")
-            restored_networks.append((network, net_data))
+async def run_restore_single(temp_dir: str):
+    """Executes single container restore."""
+    metadata_path = os.path.join(temp_dir, "metadata.json")
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
 
-        # 3. Create volumes & restore archived files
-        mounts = metadata.get('Mounts', [])
+    name = metadata['Name'].replace("/", "")
+    image = metadata['Config']['Image']
+
+    # 1. Pre-pull required Docker image
+    client.images.pull(image)
+
+    # 2. Auto-create network infrastructure
+    networks_config = metadata.get('NetworkSettings', {}).get('Networks', {})
+    restored_networks = []
+    for net_name, net_data in networks_config.items():
+        try:
+            network = client.networks.get(net_name)
+        except docker.errors.NotFound:
+            network = client.networks.create(net_name, driver="bridge")
+        restored_networks.append((network, net_data))
+
+    # 3. Create volumes & restore archived files
+    mounts = metadata.get('Mounts', [])
+    volume_binds = {}
+    for mount in mounts:
+        if mount['Type'] == 'volume':
+            vol_name = mount['Name']
+            dest = mount['Destination']
+            
+            client.volumes.create(name=vol_name)
+            volume_binds[vol_name] = {'bind': dest, 'mode': 'rw'}
+            
+            tar_archive_path = os.path.join(temp_dir, "volumes", f"volume_{vol_name}.tar")
+            if os.path.exists(tar_archive_path):
+                sidecar = client.containers.run(
+                    "alpine:latest",
+                    command="sleep 3600",
+                    volumes={vol_name: {'bind': dest, 'mode': 'rw'}},
+                    detach=True
+                )
+                
+                with open(tar_archive_path, 'rb') as tar_file:
+                    with tarfile.open(fileobj=tar_file) as outer_tar:
+                        inner_tar_extracted = outer_tar.extractfile("backup.tar")
+                        if inner_tar_extracted:
+                            sidecar.put_archive(dest, inner_tar_extracted.read())
+                
+                sidecar.stop()
+                sidecar.remove()
+
+    # 4. Construct port mappings
+    ports_map = metadata.get('NetworkSettings', {}).get('Ports', {})
+    formatted_ports = {}
+    if ports_map:
+        for container_port, host_ports in ports_map.items():
+            if host_ports:
+                formatted_ports[container_port] = host_ports[0]['HostPort']
+
+    # 5. Spin up the restored container
+    restored_container = client.containers.create(
+        image,
+        name=name,
+        ports=formatted_ports,
+        environment=metadata['Config'].get('Env', []),
+        volumes=volume_binds,
+        restart_policy={"Name": "always"}
+    )
+
+    # 6. Connect container to custom networks
+    for network, net_data in restored_networks:
+        try:
+            if network.name != "bridge":
+                network.connect(
+                    restored_container,
+                    aliases=net_data.get('Aliases', []),
+                    ipv4_address=net_data.get('IPAddress', None)
+                )
+        except Exception as net_err:
+            print(f"Network bind warning: {net_err}")
+
+    restored_container.start()
+    return {"status": "success", "message": f"Container '{name}' and all dependent volumes/networks restored successfully!"}
+
+
+async def run_restore_project(temp_dir: str):
+    """Restores an entire compose stack, side-loading any frozen docker layers, volumes, and networks."""
+    metadata_path = os.path.join(temp_dir, "stack_metadata.json")
+    with open(metadata_path, "r") as f:
+        stack_metadata = json.load(f)
+
+    project_name = stack_metadata["project_name"]
+
+    # 1. Setup custom default bridge network for the stack
+    network_name = f"{project_name}_default"
+    try:
+        network = client.networks.get(network_name)
+    except docker.errors.NotFound:
+        network = client.networks.create(network_name, driver="bridge")
+
+    # 2. Side-load embedded images directly to host engine if available
+    if stack_metadata.get("images_included", False):
+        for service in stack_metadata["services"]:
+            img_filename = service.get("image_filename")
+            if img_filename:
+                tar_path = os.path.join(temp_dir, "images", img_filename)
+                if os.path.exists(tar_path):
+                    with open(tar_path, 'rb') as f:
+                        client.images.load(f.read())
+
+    # 3. Process volumes and create containers
+    for service in stack_metadata["services"]:
+        image = service["image"]
+        service_name = service["service_name"]
+        
+        # Fallback pull if the package omitted images or it's missing
+        if not stack_metadata.get("images_included", False):
+            client.images.pull(image)
+
         volume_binds = {}
-        for mount in mounts:
-            if mount['Type'] == 'volume':
-                vol_name = mount['Name']
-                dest = mount['Destination']
+        for mount in service.get("mounts", []):
+            if mount["type"] == "volume":
+                vol_name = mount["name"]
+                dest = mount["destination"]
                 
                 client.volumes.create(name=vol_name)
                 volume_binds[vol_name] = {'bind': dest, 'mode': 'rw'}
                 
-                tar_archive_path = os.path.join(temp_dir, "volumes", f"volume_{vol_name}.tar")
+                tar_archive_path = os.path.join(temp_dir, "volumes", f"vol_{vol_name}.tar")
                 if os.path.exists(tar_archive_path):
                     sidecar = client.containers.run(
                         "alpine:latest",
@@ -425,158 +533,39 @@ async def execute_restore(file: UploadFile = File(...)):
                         volumes={vol_name: {'bind': dest, 'mode': 'rw'}},
                         detach=True
                     )
-                    
                     with open(tar_archive_path, 'rb') as tar_file:
                         with tarfile.open(fileobj=tar_file) as outer_tar:
                             inner_tar_extracted = outer_tar.extractfile("backup.tar")
                             if inner_tar_extracted:
                                 sidecar.put_archive(dest, inner_tar_extracted.read())
-                    
                     sidecar.stop()
                     sidecar.remove()
 
-        # 4. Construct port mappings
-        ports_map = metadata.get('NetworkSettings', {}).get('Ports', {})
+        ports_map = service.get("ports", {})
         formatted_ports = {}
         if ports_map:
             for container_port, host_ports in ports_map.items():
                 if host_ports:
                     formatted_ports[container_port] = host_ports[0]['HostPort']
 
-        # 5. Spin up the restored container
+        # Create container explicitly referencing the project namespace
         restored_container = client.containers.create(
             image,
-            name=name,
+            name=service["container_name"],
             ports=formatted_ports,
-            environment=metadata['Config'].get('Env', []),
+            environment=service.get("env", []),
             volumes=volume_binds,
+            labels={
+                "com.docker.compose.project": project_name,
+                "com.docker.compose.service": service_name
+            },
             restart_policy={"Name": "always"}
         )
 
-        # 6. Connect container to custom networks
-        for network, net_data in restored_networks:
-            try:
-                if network.name != "bridge":
-                    network.connect(
-                        restored_container,
-                        aliases=net_data.get('Aliases', []),
-                        ipv4_address=net_data.get('IPAddress', None)
-                    )
-            except Exception as net_err:
-                print(f"Network bind warning: {net_err}")
-
+        network.connect(restored_container, aliases=[service_name])
         restored_container.start()
 
-        return {"status": "success", "message": f"Container '{name}' and all dependent volumes/networks restored successfully!"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Restore pipeline failed: {str(e)}")
-
-
-@app.post("/api/restore-project")
-async def restore_compose_project(file: UploadFile = File(...)):
-    """Restores an entire compose stack, side-loading any frozen docker layers, volumes, and networks."""
-    if not client:
-        raise HTTPException(status_code=500, detail="Docker Daemon Connection Offline")
-
-    try:
-        temp_dir = tempfile.mkdtemp()
-        zip_path = os.path.join(temp_dir, file.filename)
-        
-        with open(zip_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-
-        metadata_path = os.path.join(temp_dir, "stack_metadata.json")
-        if not os.path.exists(metadata_path):
-            raise HTTPException(status_code=400, detail="Invalid package: stack_metadata.json missing")
-
-        with open(metadata_path, "r") as f:
-            stack_metadata = json.load(f)
-
-        project_name = stack_metadata["project_name"]
-
-        # 1. Setup custom default bridge network for the stack
-        network_name = f"{project_name}_default"
-        try:
-            network = client.networks.get(network_name)
-        except docker.errors.NotFound:
-            network = client.networks.create(network_name, driver="bridge")
-
-        # 2. Side-load embedded images directly to host engine if available
-        if stack_metadata.get("images_included", False):
-            for service in stack_metadata["services"]:
-                img_filename = service.get("image_filename")
-                if img_filename:
-                    tar_path = os.path.join(temp_dir, "images", img_filename)
-                    if os.path.exists(tar_path):
-                        with open(tar_path, 'rb') as f:
-                            client.images.load(f.read())
-
-        # 3. Process volumes and create containers
-        for service in stack_metadata["services"]:
-            image = service["image"]
-            service_name = service["service_name"]
-            
-            # Fallback pull if the package omitted images or it's missing
-            if not stack_metadata.get("images_included", False):
-                client.images.pull(image)
-
-            volume_binds = {}
-            for mount in service.get("mounts", []):
-                if mount["type"] == "volume":
-                    vol_name = mount["name"]
-                    dest = mount["destination"]
-                    
-                    client.volumes.create(name=vol_name)
-                    volume_binds[vol_name] = {'bind': dest, 'mode': 'rw'}
-                    
-                    tar_archive_path = os.path.join(temp_dir, "volumes", f"vol_{vol_name}.tar")
-                    if os.path.exists(tar_archive_path):
-                        sidecar = client.containers.run(
-                            "alpine:latest",
-                            command="sleep 3600",
-                            volumes={vol_name: {'bind': dest, 'mode': 'rw'}},
-                            detach=True
-                        )
-                        with open(tar_archive_path, 'rb') as tar_file:
-                            with tarfile.open(fileobj=tar_file) as outer_tar:
-                                inner_tar_extracted = outer_tar.extractfile("backup.tar")
-                                if inner_tar_extracted:
-                                    sidecar.put_archive(dest, inner_tar_extracted.read())
-                        sidecar.stop()
-                        sidecar.remove()
-
-            ports_map = service.get("ports", {})
-            formatted_ports = {}
-            if ports_map:
-                for container_port, host_ports in ports_map.items():
-                    if host_ports:
-                        formatted_ports[container_port] = host_ports[0]['HostPort']
-
-            # Create container explicitly referencing the project namespace
-            restored_container = client.containers.create(
-                image,
-                name=service["container_name"],
-                ports=formatted_ports,
-                environment=service.get("env", []),
-                volumes=volume_binds,
-                labels={
-                    "com.docker.compose.project": project_name,
-                    "com.docker.compose.service": service_name
-                },
-                restart_policy={"Name": "always"}
-            )
-
-            network.connect(restored_container, aliases=[service_name])
-            restored_container.start()
-
-        return {"status": "success", "message": f"Stack '{project_name}' completely restored using local image layers!"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Stack restore failed: {str(e)}")
+    return {"status": "success", "message": f"Stack '{project_name}' completely restored using local image layers!"}
 
 
 def generate_compose_blueprint(attrs: dict) -> str:
