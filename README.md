@@ -8,20 +8,24 @@
 
 By interfacing directly with the host's Docker socket, **DockMove** lets you inspect running containers, package their settings, networks, and data volumes into a unified .zip bundle, and restore them flawlessly on any secondary host running **DockMove**.
 
+---
 
 ## Features
 
-- <ins>Automated Discovery:</ins> Scans and parses metadata from the host's /var/run/docker.sock Unix socket instantly.
-- <ins>Sidecar-powered Extraction:</ins> Automatically spins up temporary Alpine sidecars to extract bind-mount and named-volume states into compressed TAR archives.
-- <ins>Dynamic Compose Translation:</ins> Re-constructs container configuration (environment variables, port binds, entrypoints, and network configs) into a standard, clean docker-compose.yml.
-- <ins>Zero-Dependency Restoration:</ins> Upload a .zip archive on a brand-new host to extract volume structures, replicate custom bridges, and bring your containers back online.
-- <ins>Real-Time Pipeline Feed:</ins> Full visual dashboard console output mirroring host commands.
+* **Automated Discovery:** Scans and parses metadata from the host's `/var/run/docker.sock` Unix socket instantly.
+* **Symmetrical Scrollable Dashboard:** Features a clean layout utilizing a custom color identity with standalone containers and Active Compose Stacks neatly encapsulated in space-conscious, scrollable viewports.
+* **Dual Sequential Processing Queues:** Select multiple stacks or containers for export, or drop multiple `.zip` archives into the restore zone simultaneously. Tasks are processed one-by-one to prevent CPU and Docker socket congestion.
+* **WordPress Auto-Heal Engine:** Automatically patches migrated WordPress environments on the fly. Injects dynamic URL overrides early in the bootstrap phase (`wp-config.php`), disables forced SSL constants, and sanitizes `.htaccess` routing to eliminate post-migration `301 Moved Permanently` loops.
+* **Sidecar-powered Extraction:** Spins up temporary Alpine sidecars to extract bind-mount and named-volume states into compressed TAR archives.
+* **Dynamic Compose Translation:** Reconstructs container configuration (environment variables, port binds, entrypoints, and network configs) into a standard, clean `docker-compose.yml`.
+* **Real-Time Pipeline Feed:** A dedicated layout terminal panel mirrors active host commands and migration logs in real time.
 
+---
 
 ## Quick Start
-1. <ins>Run via Docker CLI (Direct)</ins>
+### 1. Run via Docker CLI (Direct)
 
-You can launch the tool locally by executing a single command. To interact with your host engine, DockMove must have access to your local Unix socket:
+Launch the tool locally by executing the following command. To interact with your host engine, DockMove must have access to your local Unix socket:
 
 ```bash
 docker run -d
@@ -33,7 +37,7 @@ docker run -d
 nurdy-dude/dockmove:latest
 ```
 
-2. <ins>Run via Docker Compose</ins>
+### 2. Run via Docker Compose
 
 Create a docker-compose.yml file and run:
 
@@ -49,7 +53,10 @@ docker compose up -d
 ```
 
 >[!TIP]
->Access the control dashboard by navigating to http://localhost:6767.
+>Access the control dashboard by navigating to 
+http://localhost:6767.
+
+---
 
 ## How It Works
 
@@ -78,6 +85,8 @@ docker compose up -d
                                                     │ Spin up target stack   │
                                                     └────────────────────────┘
 
+---
+
 ## Security Best Practices
 
 >[!WARNING]
@@ -85,11 +94,11 @@ docker compose up -d
 
 <ins>Hardening Your Deployment:</ins>
 
-Private Binding: *Do not expose port 6767 directly to the open Internet (0.0.0.0:6767). Change port exposures in your docker-compose.yml to loopback only (127.0.0.1:6767:6767) and access the dashboard using a secure private network, such as Tailscale or WireGuard.*
+* **Private Binding:** Do not expose port 6767 directly to the open Internet (0.0.0.0:6767). Change port exposures in your docker-compose.yml to loopback only (127.0.0.1:6767:6767) and access the dashboard using a secure private network, such as Tailscale or WireGuard.
+* **Reverse Proxy Credentials:** Put DockMove behind a reverse proxy (like Traefik, Nginx, or Caddy) with Basic Auth or OAuth (e.g., Authelia/Keycloak) configured.
+* **Temporary Usage:** We recommend keeping DockMove stopped or suspended, running it only when performing active migrations or backup tasks.
 
-Reverse Proxy Credentials: *Put DockMove behind a reverse proxy (like Traefik, Nginx, or Caddy) with Basic Auth or OAuth (e.g., Authelia/Keycloak) configured.*
-
-Temporary Usage: *We recommend keeping DockMove stopped or suspended, running it only when performing active migrations or backup tasks.*
+---
 
 ## License
 
